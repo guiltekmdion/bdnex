@@ -14,7 +14,7 @@ from bdnex.lib.comicrack import comicInfo
 from bdnex.lib.cover import front_cover_similarity, get_bdgest_cover
 from bdnex.lib.utils import yesno, args, bdnex_config
 from bdnex.lib.disambiguation import FilenameMetadataExtractor, CandidateScorer
-from bdnex.lib.batch_processor import BatchProcessor, ProcessingResult
+from bdnex.lib.batch_processor import ProcessingResult
 from bdnex.ui.challenge import ChallengeUI
 from bdnex.ui.batch_challenge import BatchChallengeUI
 from pathlib import Path
@@ -278,21 +278,16 @@ def add_metadata_from_bdgest(filename, batch_processor=None, interactive=True, s
 
 
 def main():
-    """Main entry point with batch processing support."""
+    """Main entry point with advanced batch processing support."""
+    from bdnex.lib.batch_config import SitemapCache
+    from bdnex.lib.advanced_batch_processor import AdvancedBatchProcessor
+    
     vargs = args()
     logger = logging.getLogger(__name__)
 
     if vargs.init:
         BdGestParse().download_sitemaps()
 
-    # Batch processing or single file
-    batch_processor = None
-    interactive_mode = True
-    
-    if vargs.batch:
-        batch_processor = BatchProcessor(interactive=False, strict_mode=vargs.strict)
-        interactive_mode = False
-    
     if vargs.input_dir:
         dirpath = vargs.input_dir
         files = []
@@ -305,34 +300,42 @@ def main():
 
         logger.info(f"Trouvé {len(files)} fichier(s) BD à traiter")
         
-        for file in files:
-            try:
-                add_metadata_from_bdgest(
-                    file,
-                    batch_processor=batch_processor,
-                    interactive=interactive_mode,
-                    strict_mode=vargs.strict
-                )
-            except Exception as e:
-                logger.error(f"{file} n'a pas pu être traité: {str(e)}")
+        # Use advanced batch processor for parallel processing
+        processor = AdvancedBatchProcessor(
+            batch_mode=vargs.batch,
+            strict_mode=vargs.strict,
+            num_workers=4,  # Default 4 workers
+        )
         
-        # After all files processed in batch mode, show consolidated challenge UI
-        if batch_processor and not vargs.strict:
-            low_conf = batch_processor.get_low_confidence_results()
-            if low_conf:
-                logger.info(f"\n{len(low_conf)} fichier(s) nécessite(nt) une révision manuelle")
-                batch_challenge = BatchChallengeUI()
-                try:
-                    selections = batch_challenge.show_batch_challenge(low_conf)
-                    if selections:
-                        logger.info(f"Sélections de l'utilisateur reçues: {selections}")
-                        # TODO: Apply selections back to files
-                except Exception as e:
-                    logger.warning(f"Interface de révision par lot indisponible: {e}")
-                    logger.info("Fichiers avec faible confiance ignorés")
-            
-            # Print batch statistics
-            batch_processor.print_summary()
+        # Process files (parallel if multiple workers)
+        if processor.config.num_workers > 1 and len(files) > 1:
+            results = processor.process_files_parallel(
+                files,
+                interactive=not vargs.batch,  # Interactive only if not batch mode
+                strict_mode=vargs.strict,
+                max_retries=3,
+            )
+        else:
+            results = processor.process_files_sequential(
+                files,
+                interactive=not vargs.batch,
+                strict_mode=vargs.strict,
+                max_retries=3,
+            )
+        
+        # After all files processed in batch mode, show consolidated challenge UI if needed
+        low_conf_files = processor.get_low_confidence_files(results)
+        if low_conf_files and not vargs.strict and not vargs.batch:
+            logger.info(f"\n{len(low_conf_files)} fichier(s) nécessite(nt) une révision manuelle")
+            batch_challenge = BatchChallengeUI()
+            try:
+                # TODO: Implement consolidated challenge UI for low-confidence files
+                logger.info("Révision par lot des fichiers avec faible confiance")
+            except Exception as e:
+                logger.warning(f"Interface de révision indisponible: {e}")
+        
+        # Print summary and save logs
+        processor.print_summary(results)
 
     elif vargs.input_file:
         file = vargs.input_file

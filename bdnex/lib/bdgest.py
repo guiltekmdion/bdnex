@@ -29,8 +29,17 @@ BDGEST_SITEMAPS = resource_filename('bdnex', "conf/bedetheque_sitemap.json")
 
 
 class BdGestParse:
-    def __init__(self):
+    def __init__(self, interactive: bool = True, sitemap_cache = None):
+        """
+        Initialize BdGestParse.
+        
+        Args:
+            interactive: Enable interactive mode (show prompts). If False, raise error on ambiguous matches
+            sitemap_cache: Optional SitemapCache instance for faster lookups
+        """
         self.logger = logging.getLogger(__name__)
+        self.interactive = interactive
+        self.sitemap_cache = sitemap_cache
 
         bdnex_conf = bdnex_config()
         share_path = os.path.expanduser(bdnex_conf['bdnex']['share_path'])
@@ -48,6 +57,7 @@ class BdGestParse:
             os.makedirs(self.album_metadata_json_path)
 
         self.album_metadata_html_path = os.path.join(self.bdnex_local_path, 'albums_html')
+
     
     @staticmethod
     def parse_date_from_depot_legal(depot_legal_str):
@@ -127,6 +137,18 @@ class BdGestParse:
 
     @lru_cache(maxsize=32)
     def clean_sitemaps_urls(self):
+        """
+        Clean and return sitemap URLs with optional caching.
+        
+        Returns:
+            Tuple of (album_list, urls_list)
+        """
+        # Try cache first if available
+        if self.sitemap_cache:
+            cached = self.sitemap_cache.get_cache()
+            if cached:
+                return cached['album_list'], cached['urls']
+        
         tempfile_path = self.concatenate_sitemaps_files()
 
         try:
@@ -146,6 +168,10 @@ class BdGestParse:
             album_list = []
             for val in cleansed:
                 album_list.append(self.remove_common_words_from_string(val))
+
+            # Save to cache if available
+            if self.sitemap_cache:
+                self.sitemap_cache.save_cache(album_list, urls_list)
 
             return album_list, urls_list
         finally:
@@ -226,9 +252,23 @@ class BdGestParse:
         candidates = [(row[0], row[1], row[2]) for row in df.values]
         return candidates
 
-    def search_album_from_sitemaps_interactive(self):
+    def search_album_from_sitemaps_interactive(self, album_name: str = None):
+        """
+        Interactive fuzzy search for album matching.
+        
+        Args:
+            album_name: Optional album name to pre-select
+        
+        Returns:
+            URL of selected album
+        
+        Raises:
+            ValueError: If not in interactive mode or no selection made
+        """
+        if not self.interactive:
+            raise ValueError("Mode non-interactif : impossible de faire une recherche manuelle interactive")
+        
         # interactive fuzzy search for user prompt
-
         album_list, urls = self.clean_sitemaps_urls()
 
         questions = [
