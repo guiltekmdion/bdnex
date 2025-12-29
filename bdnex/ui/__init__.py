@@ -12,6 +12,7 @@ from bdnex.lib.archive_tools import archive_get_front_cover
 from bdnex.lib.bdgest import BdGestParse
 from bdnex.lib.comicrack import comicInfo
 from bdnex.lib.renaming import RenameManager
+from bdnex.lib.catalog_manager import CatalogManager
 from bdnex.lib.cover import front_cover_similarity, get_bdgest_cover
 from bdnex.lib.utils import yesno, args, bdnex_config
 from bdnex.lib.disambiguation import FilenameMetadataExtractor, CandidateScorer
@@ -320,6 +321,112 @@ def add_metadata_from_bdgest(filename, batch_processor=None, interactive=True, s
         return result
 
 
+def handle_catalog_commands(vargs, logger):
+    """
+    Handle catalog subcommands.
+    
+    Args:
+        vargs: Parsed arguments
+        logger: Logger instance
+        
+    Returns:
+        True if catalog command was handled, False otherwise
+    """
+    if vargs.command != 'catalog':
+        return False
+    
+    catalog = CatalogManager()
+    
+    if vargs.catalog_command == 'list':
+        # List BDs by category
+        limit = vargs.limit
+        
+        if vargs.list_by == 'series':
+            results = catalog.list_by_series(limit=limit)
+            print("\n" + "=" * 80)
+            print(f"SÉRIES (Top {len(results)})")
+            print("=" * 80)
+            for series, count in results:
+                print(f"  {series:<65} {count:>5} album(s)")
+            print("=" * 80 + "\n")
+        
+        elif vargs.list_by == 'publisher':
+            results = catalog.list_by_publisher(limit=limit)
+            print("\n" + "=" * 80)
+            print(f"ÉDITEURS (Top {len(results)})")
+            print("=" * 80)
+            for publisher, count in results:
+                print(f"  {publisher:<65} {count:>5} album(s)")
+            print("=" * 80 + "\n")
+        
+        elif vargs.list_by == 'year':
+            results = catalog.list_by_year(limit=limit)
+            print("\n" + "=" * 80)
+            print(f"ANNÉES (Top {len(results)})")
+            print("=" * 80)
+            for year, count in results:
+                print(f"  {year:<10} {count:>5} album(s)")
+            print("=" * 80 + "\n")
+    
+    elif vargs.catalog_command == 'search':
+        # Search in catalog
+        results = catalog.search(
+            vargs.query,
+            publisher=vargs.publisher,
+            year=vargs.year,
+            limit=vargs.limit
+        )
+        
+        print("\n" + "=" * 80)
+        print(f"RÉSULTATS DE RECHERCHE: \"{vargs.query}\" ({len(results)} résultat(s))")
+        print("=" * 80)
+        
+        for album in results:
+            series = album.get('series', 'N/A')
+            number = album.get('number', 'N/A')
+            title = album.get('title', 'N/A')
+            year = album.get('year', 'N/A')
+            
+            print(f"\n  {series} - Tome {number}: {title} ({year})")
+            print(f"    Scénario: {album.get('writer', 'N/A')}")
+            print(f"    Dessin: {album.get('penciller', 'N/A')}")
+            print(f"    Éditeur: {album.get('publisher', 'N/A')}")
+            print(f"    Fichier: {Path(album.get('file_path', 'N/A')).name}")
+        
+        print("\n" + "=" * 80 + "\n")
+    
+    elif vargs.catalog_command == 'stats':
+        # Show statistics
+        catalog.print_stats_summary()
+    
+    elif vargs.catalog_command == 'export':
+        # Export catalog
+        filters = {}
+        if vargs.publisher:
+            filters['publisher'] = vargs.publisher
+        if vargs.year:
+            filters['year'] = vargs.year
+        if vargs.series:
+            filters['series'] = vargs.series
+        
+        if vargs.export_format == 'csv':
+            count = catalog.export_csv(vargs.export_output, filters)
+        else:  # json
+            count = catalog.export_json(vargs.export_output, filters)
+        
+        filter_str = ""
+        if filters:
+            filter_str = f" (filtré: {', '.join(f'{k}={v}' for k, v in filters.items())})"
+        
+        print(f"\n✓ {count} album(s) exporté(s) vers {vargs.export_output}{filter_str}\n")
+    
+    else:
+        logger.error(f"Commande catalog inconnue: {vargs.catalog_command}")
+        return False
+    
+    return True
+
+
 def main():
     """Main entry point with advanced batch processing support."""
     from bdnex.lib.batch_config import SitemapCache
@@ -328,6 +435,10 @@ def main():
     
     vargs = args()
     logger = logging.getLogger(__name__)
+    
+    # Handle catalog commands first
+    if handle_catalog_commands(vargs, logger):
+        return
 
     # Database-aware CLI commands (Phase 2A)
     cli_manager = CLISessionManager()

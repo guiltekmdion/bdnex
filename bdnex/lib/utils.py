@@ -147,7 +147,50 @@ def args():
         Returns:
             vargs (obj): input arguments
     """
-    parser = argparse.ArgumentParser(description='BD metadata retriever')
+    parser = argparse.ArgumentParser(description='BD metadata retriever',
+                                    epilog='Use "bdnex catalog <command> --help" for catalog subcommands')
+    
+    # Create subparsers for catalog commands
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Catalog subcommand
+    catalog_parser = subparsers.add_parser('catalog', help='Manage and explore your BD catalog')
+    catalog_subparsers = catalog_parser.add_subparsers(dest='catalog_command', help='Catalog operations')
+    
+    # catalog list
+    list_parser = catalog_subparsers.add_parser('list', help='List BDs by category')
+    list_parser.add_argument('--by', dest='list_by', choices=['series', 'publisher', 'year'],
+                            default='series', help='List by series, publisher, or year')
+    list_parser.add_argument('--limit', type=int, default=100,
+                            help='Maximum number of results (default: 100)')
+    
+    # catalog search
+    search_parser = catalog_subparsers.add_parser('search', help='Search in your catalog')
+    search_parser.add_argument('query', type=str, help='Search term')
+    search_parser.add_argument('--publisher', type=str, default=None,
+                              help='Filter by publisher')
+    search_parser.add_argument('--year', type=int, default=None,
+                              help='Filter by year')
+    search_parser.add_argument('--limit', type=int, default=100,
+                              help='Maximum number of results (default: 100)')
+    
+    # catalog stats
+    stats_parser = catalog_subparsers.add_parser('stats', help='Show library statistics')
+    
+    # catalog export
+    export_parser = catalog_subparsers.add_parser('export', help='Export catalog to file')
+    export_parser.add_argument('--format', dest='export_format', choices=['csv', 'json'],
+                              required=True, help='Export format')
+    export_parser.add_argument('--output', dest='export_output', required=True,
+                              help='Output file path')
+    export_parser.add_argument('--publisher', type=str, default=None,
+                              help='Filter by publisher')
+    export_parser.add_argument('--year', type=int, default=None,
+                              help='Filter by year')
+    export_parser.add_argument('--series', type=str, default=None,
+                              help='Filter by series')
+    
+    # Main processing arguments (original arguments)
     parser.add_argument('-f', '--input-file', dest='input_file', type=str, default=None,
                         help="BD file path",
                         required=False)
