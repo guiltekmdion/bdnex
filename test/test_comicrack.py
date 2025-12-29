@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock, call
 import zipfile
 import json
 import shutil
+import xml.etree.ElementTree as ET
 
 from bdnex.lib.comicrack import comicInfo
 
@@ -14,20 +15,121 @@ class TestComicRack(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.test_comic_info = {
-            "ComicInfo": {
-                "Title": "Test Comic",
-                "Series": "Test Series",
-                "Number": "1",
-                "Writer": "Test Writer",
-                "Summary": "Test summary"
-            }
+            "Title": "Test Comic",
+            "Series": "Test Series",
+            "Number": "1",
+            "Writer": "Test Writer",
+            "Summary": "Test summary",
+            "Rating": 4.5,
+            "Year": "2020"
         }
         self.test_dir = tempfile.mkdtemp()
+        self.test_cbz = os.path.join(self.test_dir, 'test.cbz')
         
     def tearDown(self):
         """Clean up test fixtures"""
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
+    
+    def test_comicInfo_init(self):
+        """Test comicInfo initialization"""
+        ci = comicInfo(input_filename='test.cbz', comic_info=self.test_comic_info)
+        self.assertEqual(ci.input_filename, 'test.cbz')
+        self.assertEqual(ci.comic_info, self.test_comic_info)
+        self.assertIsNotNone(ci.logger)
+    
+    def test_comicInfo_xml_create(self):
+        """Test XML creation from comic info"""
+        ci = comicInfo(comic_info=self.test_comic_info)
+        xml_path = ci.comicInfo_xml_create()
+        
+        # Verify file exists
+        self.assertTrue(os.path.exists(xml_path))
+        
+        # Parse and verify XML
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        
+        self.assertEqual(root.tag, 'ComicInfo')
+        title = root.find('Title')
+        self.assertIsNotNone(title)
+        self.assertEqual(title.text, 'Test Comic')
+        
+        # Verify float formatting
+        rating = root.find('Rating')
+        self.assertIsNotNone(rating)
+        self.assertEqual(rating.text, '4.50')
+    
+    def test_comicInfo_xml_create_with_none_values(self):
+        """Test XML creation ignores None values"""
+        comic_info = {
+            'Title': 'Test',
+            'Series': None,
+            'Number': '',
+            'Summary': 'Description'
+        }
+        ci = comicInfo(comic_info=comic_info)
+        xml_path = ci.comicInfo_xml_create()
+        
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        
+        self.assertIsNotNone(root.find('Title'))
+        self.assertIsNotNone(root.find('Summary'))
+        self.assertIsNone(root.find('Series'))
+        self.assertIsNone(root.find('Number'))
+    
+    @patch('bdnex.lib.comicrack.patoolib')
+    @patch('bdnex.lib.comicrack.glob.glob')
+    @patch('bdnex.lib.comicrack.yesno')
+    @patch('bdnex.lib.comicrack.tempfile.mkdtemp')
+    def test_append_comicinfo_no_existing(self, mock_mkdtemp, mock_yesno, mock_glob, mock_patoolib):
+        """Test appending ComicInfo to archive without existing ComicInfo"""
+        # Create test CBZ
+        with zipfile.ZipFile(self.test_cbz, 'w') as zf:
+            zf.writestr('page01.jpg', b'fake image')
+        
+        mock_patoolib.get_archive_format.return_value = ('zip',)
+        mock_patoolib.test_archive.return_value = False  # Success
+        
+        # Create proper temp directories
+        comicinfo_tmpdir = os.path.join(self.test_dir, 'comicinfo')
+        extracted_tmpdir = os.path.join(self.test_dir, 'extracted')
+        os.makedirs(comicinfo_tmpdir, exist_ok=True)
+        os.makedirs(extracted_tmpdir, exist_ok=True)
+        
+        mock_mkdtemp.side_effect = [comicinfo_tmpdir, extracted_tmpdir]
+        
+        extracted_dir = os.path.join(extracted_tmpdir, 'test')
+        os.makedirs(extracted_dir, exist_ok=True)
+        
+        fake_files = [os.path.join(extracted_dir, 'page01.jpg')]
+        with open(fake_files[0], 'wb') as f:
+            f.write(b'fake')
+        
+        mock_glob.return_value = fake_files
+        
+        with patch('shutil.copy2'):
+            ci = comicInfo(input_filename=self.test_cbz, comic_info=self.test_comic_info)
+            ci.append_comicinfo_to_archive()
+            
+            mock_patoolib.create_archive.assert_called()
+    
+    def test_empty_comic_info(self):
+        """Test with empty comic info"""
+        ci = comicInfo(comic_info={})
+        xml_path = ci.comicInfo_xml_create()
+        
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        
+        # Should have root tag but no children
+        self.assertEqual(root.tag, 'ComicInfo')
+        self.assertEqual(len(root), 0)
+
+
+if __name__ == '__main__':
+    unittest.main()
         
     def test_comicInfo_xml_create(self):
         """Test creation of ComicInfo.xml"""

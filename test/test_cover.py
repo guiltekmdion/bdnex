@@ -3,7 +3,6 @@ import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 import shutil
-import cv2
 import numpy as np
 
 from bdnex.lib.cover import front_cover_similarity, get_bdgest_cover
@@ -18,16 +17,22 @@ BDGEST_OTHER_COVER = os.path.join(TEST_ROOT, 'Couv_272757.jpg')
 class TestCover(unittest.TestCase):
     def test_front_cover_similarity_good_match(self):
         """Test front cover similarity with matching covers"""
+        if not os.path.exists(ARCHIVE_COVER) or not os.path.exists(BDGEST_COVER):
+            self.skipTest("Test images not available")
         match_res = front_cover_similarity(ARCHIVE_COVER, BDGEST_COVER)
         self.assertGreater(match_res, 50)
 
     def test_front_cover_similarity_bad_match(self):
         """Test front cover similarity with non-matching covers"""
+        if not os.path.exists(ARCHIVE_COVER) or not os.path.exists(BDGEST_OTHER_COVER):
+            self.skipTest("Test images not available")
         match_res = front_cover_similarity(ARCHIVE_COVER, BDGEST_OTHER_COVER)
         self.assertLess(match_res, 5)
 
     def test_front_cover_similarity_same_image(self):
         """Test front cover similarity with identical images"""
+        if not os.path.exists(BDGEST_COVER):
+            self.skipTest("Test images not available")
         match_res = front_cover_similarity(BDGEST_COVER, BDGEST_COVER)
         # Same image should have very high similarity
         self.assertGreater(match_res, 90)
