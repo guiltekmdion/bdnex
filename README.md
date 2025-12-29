@@ -324,6 +324,60 @@ bdnex/
 
 ```
 
+#### Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph CLI["User Interface"]
+        UI[ui/__init__.py<br>CLI & Arguments]
+    end
+    
+    subgraph Core["Core Library"]
+        BDGEST[bdgest.py<br>Web Scraper & Matcher]
+        COVER[cover.py<br>Image Operations]
+        ARCHIVE[archive_tools.py<br>CBZ/CBR Handler]
+        COMICRACK[comicrack.py<br>ComicInfo.xml Generator]
+        UTILS[utils.py<br>Utilities & Config]
+    end
+    
+    subgraph External["External Resources"]
+        BEDETHEQUE[(bedetheque.com<br>Metadata Source)]
+        CACHE[(Local Cache<br>~/.local/share/bdnex)]
+        CONFIG[(Config<br>~/.config/bdnex)]
+    end
+    
+    subgraph Files["Comic Files"]
+        CBZ[CBZ/CBR Files]
+    end
+    
+    UI --> BDGEST
+    UI --> COVER
+    UI --> ARCHIVE
+    UI --> COMICRACK
+    UI --> UTILS
+    
+    BDGEST --> BEDETHEQUE
+    BDGEST --> CACHE
+    BDGEST --> COMICRACK
+    
+    COVER --> BEDETHEQUE
+    COVER --> CACHE
+    COVER --> ARCHIVE
+    
+    ARCHIVE --> CBZ
+    
+    COMICRACK --> ARCHIVE
+    COMICRACK --> CBZ
+    
+    UTILS --> CONFIG
+    UTILS --> CACHE
+    
+    style CLI fill:#e1f5ff
+    style Core fill:#fff3e0
+    style External fill:#f3e5f5
+    style Files fill:#e8f5e9
+```
+
 ### Key Components
 
 1. **bdgest.py**: 
@@ -359,6 +413,68 @@ Comic File → Extract Filename → Fuzzy Match → Scrape Metadata
                             Generate ComicInfo.xml
                                      ↓
                             Embed in Archive → Updated Comic File
+```
+
+#### Workflow Diagram
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as CLI Interface
+    participant FS as File System
+    participant BDG as bdgest.py
+    participant CACHE as Local Cache
+    participant WEB as bedetheque.com
+    participant COV as cover.py
+    participant ARC as archive_tools.py
+    participant CR as comicrack.py
+    
+    User->>CLI: bdnex -f comic.cbz
+    CLI->>FS: Read comic file
+    FS-->>CLI: File info
+    CLI->>BDG: Extract and match filename
+    
+    BDG->>CACHE: Check sitemap cache
+    alt Sitemap cached
+        CACHE-->>BDG: Return sitemap data
+    else No cache
+        BDG->>WEB: Download sitemap
+        WEB-->>BDG: Sitemap data
+        BDG->>CACHE: Store sitemap
+    end
+    
+    BDG->>BDG: Fuzzy match Levenshtein
+    BDG->>WEB: Scrape album page
+    WEB-->>BDG: HTML metadata
+    BDG->>BDG: Parse metadata
+    BDG->>CACHE: Store JSON metadata
+    
+    CLI->>COV: Download cover
+    COV->>WEB: Fetch cover image
+    WEB-->>COV: Cover image
+    COV->>CACHE: Store cover
+    
+    CLI->>ARC: Extract comic cover
+    ARC->>FS: Read from CBZ/CBR
+    FS-->>ARC: Cover image
+    
+    CLI->>COV: Compare covers SIFT
+    COV-->>CLI: Similarity percentage
+    
+    alt High confidence match
+        CLI->>CR: Generate ComicInfo.xml
+        CR->>CR: Validate against schema
+        CR->>ARC: Embed XML in archive
+        ARC->>FS: Update CBZ/CBR
+        CLI-->>User: Success message
+    else Low confidence
+        CLI-->>User: Request manual confirmation
+        User->>CLI: Provide URL or confirm
+        CLI->>CR: Generate ComicInfo.xml
+        CR->>ARC: Embed XML in archive
+        ARC->>FS: Update CBZ/CBR
+        CLI-->>User: Success message
+    end
 ```
 
 ## Contributing
