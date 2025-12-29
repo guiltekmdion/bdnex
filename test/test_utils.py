@@ -57,7 +57,8 @@ class TestUtils(unittest.TestCase):
 
     def test_load_json_nonexistent(self):
         """Test load_json with non-existent file"""
-        result = load_json('/tmp/nonexistent_file_12345.json')
+        nonexistent_path = os.path.join(tempfile.gettempdir(), 'nonexistent_file_12345.json')
+        result = load_json(nonexistent_path)
         self.assertIsNone(result)
 
     @patch('urllib.request.urlretrieve')
