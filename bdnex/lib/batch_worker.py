@@ -3,6 +3,7 @@ Worker process pour batch processing parallèle.
 Traite un seul fichier BD de manière isolée avec retry logic.
 """
 import logging
+import os
 import sys
 from typing import Dict, Any
 from bdnex.ui import add_metadata_from_bdgest
@@ -27,13 +28,14 @@ def process_single_file(
         Result dict with success, filename, score, title, error (if any)
     """
     logger = logging.getLogger(__name__)
+    file_path = os.path.abspath(filename)
     
     for attempt in range(max_retries):
         try:
             logger.debug(f"Processing {filename} (attempt {attempt + 1}/{max_retries})")
             
             result = add_metadata_from_bdgest(
-                filename,
+                file_path,
                 batch_processor=None,  # Don't track in batch processor (will do it in main)
                 interactive=interactive,
                 strict_mode=strict_mode
@@ -41,6 +43,7 @@ def process_single_file(
             
             # Convert ProcessingResult to dict
             return {
+                'file_path': file_path,
                 'filename': result.filename,
                 'success': result.success,
                 'score': result.score,
@@ -60,7 +63,8 @@ def process_single_file(
             else:
                 logger.error(f"Échec définitif après {max_retries} tentatives")
                 return {
-                    'filename': filename,
+                    'file_path': file_path,
+                    'filename': os.path.basename(file_path),
                     'success': False,
                     'score': 0.0,
                     'title': 'Unknown',
@@ -68,7 +72,8 @@ def process_single_file(
                 }
     
     return {
-        'filename': filename,
+        'file_path': file_path,
+        'filename': os.path.basename(file_path),
         'success': False,
         'score': 0.0,
         'title': 'Unknown',

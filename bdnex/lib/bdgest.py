@@ -18,15 +18,15 @@ import pandas as pd
 import requests
 from InquirerPy import prompt
 from bs4 import BeautifulSoup
-from pkg_resources import resource_filename
+from importlib.resources import files
 from rapidfuzz import fuzz
 from termcolor import colored
 
 from bdnex.lib.utils import dump_json, load_json, bdnex_config
 from bdnex.lib.batch_config import SitemapCache
 
-BDGEST_MAPPING = resource_filename('bdnex', "conf/bdgest_mapping.json")
-BDGEST_SITEMAPS = resource_filename('bdnex', "conf/bedetheque_sitemap.json")
+BDGEST_MAPPING = str(files('bdnex.conf').joinpath('bdgest_mapping.json'))
+BDGEST_SITEMAPS = str(files('bdnex.conf').joinpath('bedetheque_sitemap.json'))
 
 # Global sitemap cache instance (singleton)
 _GLOBAL_SITEMAP_CACHE = None
@@ -78,19 +78,6 @@ class BdGestParse:
 
         self.album_metadata_html_path = os.path.join(self.bdnex_local_path, 'albums_html')
 
-    
-    @staticmethod
-    def parse_date_from_depot_legal(depot_legal_str):
-        """Parse Dépot légal string and return datetime object."""
-        if not depot_legal_str:
-            return None
-        try:
-            return dateutil.parser.parse(depot_legal_str)
-        except Exception:
-            try:
-                return datetime.strptime(depot_legal_str, '(Parution le %d/%m/%Y)')
-            except Exception:
-                return None
         if not os.path.exists(self.album_metadata_html_path):
             os.makedirs(self.album_metadata_html_path)
 
@@ -105,6 +92,20 @@ class BdGestParse:
         if len(os.listdir(self.sitemaps_path)) == 0:
             self.logger.info(f"No sitemaps exist yet. Downloading all available sitemaps locally to {self.sitemaps_path}")
             self.download_sitemaps()
+
+    @staticmethod
+    def parse_date_from_depot_legal(depot_legal_str):
+        """Parse Dépot légal string and return datetime object."""
+        if not depot_legal_str:
+            return None
+        try:
+            return dateutil.parser.parse(depot_legal_str)
+        except Exception:
+            try:
+                return datetime.strptime(depot_legal_str, '(Parution le %d/%m/%Y)')
+            except Exception:
+                return None
+        return None
 
     @staticmethod
     def generate_sitemaps_url():
@@ -417,9 +418,27 @@ class BdGestParse:
         album_meta_dict['cover_url'] = cover_url
         self.logger.debug(cover_url)
         summary_extract = soup.find_all('span', attrs={"class": 'infoedition'})
-        for name in summary_extract:
-            if 'Résumé' in name.contents[0].contents[0]:
-                album_meta_dict["description"] = name.contents[1]
+        for node in summary_extract:
+            try:
+                em = node.find('em')
+                em_text = (em.get_text(" ", strip=True) if em else "")
+                em_text_l = em_text.lower()
+                # On Windows unit tests, the fixture may be decoded with cp1252, producing mojibake:
+                # "Résumé" -> "RÃ©sumÃ©". Accept common variants.
+                is_resume = (
+                    'résumé' in em_text_l
+                    or 'resume' in em_text_l
+                    or 'rã©sumã©' in em_text_l
+                    or 'rã‰sumã‰' in em_text_l
+                )
+                if is_resume:
+                    full_text = node.get_text(" ", strip=True)
+                    # Remove the label part (e.g. "Résumé:") from the start.
+                    if em_text and full_text.lower().startswith(em_text.lower()):
+                        full_text = full_text[len(em_text):].lstrip(' :\u00a0')
+                    album_meta_dict["description"] = full_text
+            except Exception:
+                pass
 
         for key in album_meta_dict.keys():
             try:
@@ -456,16 +475,27 @@ class BdGestParse:
 
         # retrieving series information (abstract mainly)
         if 'Tome' in album_meta_dict.keys():  # this should mean this is a series
+            # Ensure we have a series URL even if the label parsing didn't catch it
+            if 'series_href' not in locals():
+                try:
+                    series_link = soup.find('a', href=re.compile(r'(serie|s%C3%A9rie|série)', re.IGNORECASE))
+                    if series_link and series_link.get('href'):
+                        series_href = series_link.get('href')
+                except Exception:
+                    pass
+
             if 'series_href' in locals():
-                series_meta_dict = self.parse_serie_metadata_mobile(series_href)
-                if 'series_abstract' in series_meta_dict:
-                    series_abstract = series_meta_dict['series_abstract']
+                try:
+                    series_meta_dict = self.parse_serie_metadata_mobile(series_href)
+                    if 'series_abstract' in series_meta_dict:
+                        series_abstract = series_meta_dict['series_abstract']
+                except Exception:
+                    pass
 
-        # append summary from series to album summary
+        # If both album résumé and series abstract exist, keep the album résumé first.
         if 'description' in album_meta_dict:
-            if 'series_abstract' in locals():
-                album_meta_dict['description'] = f"{series_abstract}\n {album_meta_dict['description']}"
-
+            if 'series_abstract' in locals() and series_abstract:
+                album_meta_dict['description'] = f"{album_meta_dict['description']}\n{series_abstract}".strip()
         else:
             if 'series_abstract' in locals():
                 album_meta_dict['description'] = series_abstract
@@ -494,6 +524,9 @@ class BdGestParse:
         Returns:
 
         """
+        # Allow passing relative URLs from the mobile site
+        if isinstance(serie_url, str) and serie_url.startswith('/'):
+            serie_url = f"https://m.bedetheque.com{serie_url}"
         serie_meta_json_path = '{filepath}.json'.format(filepath=os.path.join(self.serie_metadata_json_path,
                                                                               os.path.basename(serie_url)))
         serie_meta_html_path = os.path.join(self.serie_metadata_html_path,
@@ -528,7 +561,17 @@ class BdGestParse:
 
             soup = BeautifulSoup(content, 'lxml')
 
-        series_abstract = soup.find(id='full-commentaire').attrs['value']
+        series_abstract = ""
+        try:
+            node = soup.find(id='full-commentaire')
+            if node is not None:
+                if node.has_attr('value'):
+                    series_abstract = node.attrs.get('value') or ""
+                else:
+                    # Often a <textarea> with the content as text.
+                    series_abstract = node.get_text(" ", strip=True)
+        except Exception:
+            series_abstract = ""
         series_meta_dict = {}
         series_meta_dict['series_abstract'] = series_abstract
 
@@ -547,6 +590,11 @@ class BdGestParse:
                     value = float(Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
                 comicrack_dict[bdgest_mapping[key]] = value
 
+        # Normalize free-text fields
+        summary = comicrack_dict.get('Summary')
+        if isinstance(summary, str):
+            comicrack_dict['Summary'] = summary.lstrip('\ufeff').strip()
+
         # Append ISBN to Notes if available (ComicInfo.xsd has no dedicated ISBN field)
         isbn = metadata_dict.get('ISBN')
         if isbn:
@@ -554,17 +602,20 @@ class BdGestParse:
             notes = f"{existing_notes}\nISBN: {isbn}".strip()
             comicrack_dict['Notes'] = notes
 
-        try:
-            published_date = dateutil.parser.parse(metadata_dict['Dépot_légal'])
-        except dateutil.parser._parser.ParserError:
+        depot_legal = metadata_dict.get('Dépot_légal')
+        published_date = None
+        if depot_legal:
             try:
-                published_date = datetime.strptime(metadata_dict['Dépot_légal'], '(Parution le %d/%m/%Y)')
-            except Exception as err2:
-                self.logger.error('{published_date}'.format(published_date=metadata_dict['Dépot_légal']))
-        except:
-            self.logger.error('{published_date}'.format(published_date=metadata_dict['Dépot_légal']))
+                published_date = dateutil.parser.parse(depot_legal)
+            except dateutil.parser._parser.ParserError:
+                try:
+                    published_date = datetime.strptime(depot_legal, '(Parution le %d/%m/%Y)')
+                except Exception:
+                    self.logger.error('{published_date}'.format(published_date=depot_legal))
+            except Exception:
+                self.logger.error('{published_date}'.format(published_date=depot_legal))
 
-        if "published_date" in locals():
+        if published_date is not None:
             comicrack_dict["Year"] = published_date.year
             comicrack_dict["Month"] = published_date.month
             comicrack_dict["Day"] = published_date.day

@@ -447,7 +447,7 @@ class BatchChallengeUI:
         html_content = self.generate_html(low_confidence_results)
         
         # Store selections globally
-        selections = {'data': {}}
+        selections = {'done': False, 'data': {}}
         
         class BatchHandler(http.server.SimpleHTTPRequestHandler):
             def do_POST(self):
@@ -457,6 +457,7 @@ class BatchChallengeUI:
                     data = json.loads(body.decode())
                     
                     selections['data'] = data.get('selections', {})
+                    selections['done'] = True
                     
                     self.send_response(200)
                     self.send_header('Content-type', 'application/json')
@@ -477,6 +478,8 @@ class BatchChallengeUI:
         
         try:
             with socketserver.TCPServer(("", port), BatchHandler) as httpd:
+                # Prevent handle_request() from blocking forever when no request arrives.
+                httpd.timeout = 0.5
                 url = f"http://localhost:{port}/"
                 self.logger.info(f"Ouverture de l'interface de révision par lot sur {url}")
                 
@@ -492,12 +495,14 @@ class BatchChallengeUI:
                 timeout = 600  # 10 minutes
                 
                 while time.time() - start_time < timeout:
-                    if selections['data'] is not None and (isinstance(selections['data'], dict) or selections['data']):
-                        self.logger.info("Révision par lot terminée par l'utilisateur")
-                        return {int(k): v for k, v in selections['data'].items()}
-                    
                     httpd.handle_request()
-                    time.sleep(0.5)
+                    if selections.get('done'):
+                        self.logger.info("Révision par lot terminée par l'utilisateur")
+                        data = selections.get('data') or {}
+                        if isinstance(data, dict):
+                            return {int(k): v for k, v in data.items()}
+                        return {}
+                    time.sleep(0.1)
                 
                 self.logger.warning("Délai d'attente de révision par lot dépassé")
                 return {}

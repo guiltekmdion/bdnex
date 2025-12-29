@@ -153,7 +153,7 @@ class InteractiveUI:
             self.console.print("[red]❌ Quitting...[/red]\n")
             return {"action": "quit"}
         else:
-            self.console.print("[green]✓ Selected[/green]\n")
+            self.console.print("[green][OK] Selected[/green]\n")
             return result
     
     def edit_metadata_manually(self, initial_metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -236,7 +236,7 @@ class InteractiveUI:
         ).execute()
         
         if confirm:
-            self.console.print("[green]✓ Metadata saved[/green]\n")
+            self.console.print("[green][OK] Metadata saved[/green]\n")
             return metadata
         else:
             self.console.print("[yellow]⚠ Cancelled[/yellow]\n")
@@ -292,8 +292,8 @@ class InteractiveUI:
         def pct(n):
             return f"{(n/total*100):.1f}%" if total > 0 else "0%"
         
-        table.add_row("✓ Successful", str(successful), pct(successful), style="green")
-        table.add_row("✗ Failed", str(failed), pct(failed), style="red")
+        table.add_row("OK Successful", str(successful), pct(successful), style="green")
+        table.add_row("X Failed", str(failed), pct(failed), style="red")
         table.add_row("⏭️  Skipped", str(skipped), pct(skipped), style="yellow")
         table.add_row("━" * 10, "━" * 5, "━" * 10, style="dim")
         table.add_row("Total", str(total), "100%", style="bold")

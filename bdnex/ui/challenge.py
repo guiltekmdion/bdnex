@@ -61,7 +61,7 @@ class ChallengeUI:
         
         # Build candidates HTML
         candidates_html = ""
-        for idx, (metadata, score, cover_path) in enumerate(candidates, 1):
+        for idx, (metadata, score, cover_path) in enumerate(candidates):
             cover_b64 = ChallengeUI.image_to_base64(cover_path)
             score_percent = int(score * 100)
             score_color = ChallengeUI.get_score_color(score)
@@ -76,7 +76,7 @@ class ChallengeUI:
             candidates_html += f"""
             <div class="candidate-card" data-idx="{idx}">
                 <div class="candidate-header">
-                    <h3>Option {idx}</h3>
+                    <h3>Option {idx + 1}</h3>
                     <div class="score-badge" style="background-color: {score_color};">
                         <span class="score-value">{score_percent}%</span>
                         <span class="score-label">Match</span>
@@ -84,7 +84,7 @@ class ChallengeUI:
                 </div>
                 
                 <div class="candidate-image">
-                    <img src="{cover_b64}" alt="Candidate {idx} cover" />
+                    <img src="{cover_b64}" alt="Candidate {idx + 1} cover" />
                 </div>
                 
                 <div class="candidate-info">
@@ -400,7 +400,7 @@ class ChallengeUI:
                 
                 <div class="content">
                     <div class="selected-info" id="selectedInfo">
-                        ✓ Sélectionné: <strong id="selectedTitle"></strong>
+                        Selection: <strong id="selectedTitle"></strong>
                     </div>
                     
                     <div class="local-section">
@@ -483,7 +483,7 @@ class ChallengeUI:
                 document.addEventListener('keydown', (e) => {{
                     const digit = parseInt(e.key);
                     if (digit >= 1 && digit <= 5) {{
-                        selectCandidate(digit);
+                        selectCandidate(digit - 1);
                     }}
                 }});
             </script>
@@ -515,12 +515,12 @@ class ChallengeUI:
         Uses a simple HTTP server to communicate with the browser.
         
         Returns:
-            Selected candidate index (0-based) or None if no selection
+            Selected candidate index (0-based), -1 if user chose manual search, or None if no selection/timeout
         """
         html_content = self.generate_html(local_cover_path, candidates, filename)
         
         # Store selection globally (will be set by browser via query param)
-        selected = {'idx': None}
+        selected = {'done': False, 'idx': None}
         
         # Create a simple HTTP request handler
         class ChallengeHandler(http.server.SimpleHTTPRequestHandler):
@@ -533,11 +533,9 @@ class ChallengeUI:
                     if 'idx' in params:
                         try:
                             idx_val = int(params['idx'][0])
-                            if idx_val == -1:
-                                # User selected "Chercher manuellement"
-                                selected['idx'] = None
-                            else:
-                                selected['idx'] = idx_val  # Keep 0-based
+                            # idx_val == -1 means user selected manual search.
+                            selected['idx'] = idx_val
+                            selected['done'] = True
                             
                             self.send_response(200)
                             self.send_header('Content-type', 'application/json')
@@ -549,9 +547,9 @@ class ChallengeUI:
                 
                 # Handle HTML request
                 self.send_response(200)
-                self.send_header('Content-type', 'text/html')
+                self.send_header('Content-type', 'text/html; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(html_content.encode())
+                self.wfile.write(html_content.encode('utf-8'))
             
             def log_message(self, format, *args):
                 # Suppress logging
@@ -562,6 +560,8 @@ class ChallengeUI:
         handler = ChallengeHandler
         
         with socketserver.TCPServer(("", port), handler) as httpd:
+            # Prevent handle_request() from blocking forever when no request arrives.
+            httpd.timeout = 0.25
             url = f"http://localhost:{port}/"
             self.logger.info(f"Serveur de défi en cours d'exécution sur {url}")
             
@@ -574,11 +574,17 @@ class ChallengeUI:
                 timeout = 300  # 5 minutes
                 
                 while time.time() - start_time < timeout:
-                    if selected['idx'] is not None:
-                        self.logger.info(f"Candidat sélectionné par l'utilisateur {selected['idx'] + 1}")
-                        return selected['idx']
-                    httpd.handle_request()  # Gérer une seule requête
-                    time.sleep(0.1)
+                    httpd.handle_request()  # handle at most one request (non-blocking due to timeout)
+                    if selected.get('done'):
+                        idx = selected.get('idx')
+                        if isinstance(idx, int) and idx >= 0:
+                            self.logger.info(f"Candidat sélectionné par l'utilisateur {idx + 1}")
+                            return idx
+                        if idx == -1:
+                            self.logger.info("Recherche manuelle demandée par l'utilisateur")
+                            return -1
+                        return None
+                    time.sleep(0.05)
                 
                 self.logger.warning("Délai d'attente du défi dépassé - aucune sélection effectuée")
                 return None

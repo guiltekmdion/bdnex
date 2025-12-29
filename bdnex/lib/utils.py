@@ -10,12 +10,12 @@ import tempfile
 import urllib.request
 
 import yaml
-from pkg_resources import resource_filename
+from importlib.resources import files
 
 from bdnex.lib.colargulog import ColorizedArgsFormatter
 
-LOGGING_CONF = resource_filename('bdnex', "/conf/logging.conf")
-DEFAULT_CONFIG_YAML = resource_filename('bdnex', "/conf/bdnex.yaml")
+LOGGING_CONF = str(files('bdnex.conf').joinpath('logging.conf'))
+DEFAULT_CONFIG_YAML = str(files('bdnex.conf').joinpath('bdnex.yaml'))
 UNIX_DIR_VAR = 'XDG_CONFIG_HOME'
 UNIX_DIR_FALLBACK = '~/.config'
 
@@ -211,6 +211,10 @@ def args():
     parser.add_argument('-b', '--batch', dest='batch', action='store_true', default=False,
                         help="Batch mode: process multiple files and show consolidated challenge UI at end",
                         required=False)
+
+    parser.add_argument('--no-progress', dest='no_progress', action='store_true', default=False,
+                        help="Disable progress display",
+                        required=False)
     
     parser.add_argument('-s', '--strict', dest='strict', action='store_true', default=False,
                         help="Strict mode: reject low-confidence matches instead of prompting",
@@ -251,8 +255,6 @@ def args():
                         required=False)
 
     init_logging()
-
-    logging.info('Logging now setup.')
 
     vargs = parser.parse_args()
 

@@ -52,6 +52,13 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# Test/runtime artifacts
+/.local/
+test_run_*.log
+test/.local/share/bdnex/batch_results/
+test/.local/share/bdnex/bedetheque/series_html/
+test/.local/share/bdnex/bedetheque/covers/
+
 # Translations
 *.mo
 *.pot
@@ -145,7 +152,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/

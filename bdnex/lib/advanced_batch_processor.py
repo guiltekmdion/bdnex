@@ -3,6 +3,7 @@ Batch processor amélioré avec multiprocessing, retry logic et logging.
 """
 import logging
 import os
+import sys
 from typing import List, Dict, Any, Optional
 from multiprocessing import Pool, cpu_count
 from functools import partial
@@ -41,6 +42,7 @@ class AdvancedBatchProcessor:
             skip_processed: Skip files already processed (requires database)
         """
         self.logger = logging.getLogger(__name__)
+        self.no_progress = bool(os.environ.get('BDNEX_NO_PROGRESS'))
         self.config = BatchConfig(
             batch_mode=batch_mode,
             strict_mode=strict_mode,
@@ -118,6 +120,7 @@ class AdvancedBatchProcessor:
             List of result dicts
         """
         from bdnex.lib.batch_worker import process_single_file
+        from bdnex.lib.progress import progress_for
         
         # Start database session if enabled
         if self.use_database and directory:
@@ -149,29 +152,33 @@ class AdvancedBatchProcessor:
         
         results = []
         processed = 0
+
+        show_progress = (not self.no_progress) and bool(getattr(sys.stdout, 'isatty', lambda: False)())
         
         try:
-            with Pool(processes=self.config.num_workers) as pool:
-                # Use imap_unordered to process results as they complete
-                for result in pool.imap_unordered(worker_func, todo_files, chunksize=1):
-                    results.append(result)
-                    self.config.add_result(result)
+            with progress_for(len(todo_files), enabled=show_progress, description="Traitement") as prog:
+                with Pool(processes=self.config.num_workers) as pool:
+                    # Use imap_unordered to process results as they complete
+                    for result in pool.imap_unordered(worker_func, todo_files, chunksize=1):
+                        results.append(result)
+                        self.config.add_result(result)
                     
                     # Record in database if enabled
                     if self.use_database and self.session_id:
                         try:
                             self.db.record_processing(
-                                result.get('filename', ''),
+                                result.get('file_path') or result.get('filename', ''),
                                 self.session_id,
                                 result
                             )
                         except Exception as e:
                             self.logger.warning(f"Could not record file in database: {e}")
                     
-                    processed += 1
-                    success_str = "✓" if result.get('success') else "✗"
-                    score_str = f"{result.get('score', 0) * 100:.0f}%" if result.get('score') else "N/A"
-                    self.logger.info(f"[{processed}/{len(todo_files)}] {success_str} {result.get('filename')} ({score_str})")
+                        processed += 1
+                        success_str = "[OK]" if result.get('success') else "[FAIL]"
+                        score_str = f"{result.get('score', 0) * 100:.0f}%" if result.get('score') else "N/A"
+                        self.logger.info(f"[{processed}/{len(todo_files)}] {success_str} {result.get('filename')} ({score_str})")
+                        prog.update(message=str(result.get('filename') or result.get('file_path') or ''))
         
         except KeyboardInterrupt:
             self.logger.warning("Interruption utilisateur - arrêt du traitement")
@@ -210,30 +217,34 @@ class AdvancedBatchProcessor:
             List of result dicts
         """
         from bdnex.lib.batch_worker import process_single_file
+        from bdnex.lib.progress import progress_for
         
         self.logger.info(f"Traitement séquentiel de {len(file_list)} fichiers")
         
         results = []
-        for idx, filename in enumerate(file_list, 1):
-            try:
-                result = process_single_file(
-                    filename,
-                    interactive=interactive,
-                    strict_mode=strict_mode,
-                    max_retries=max_retries,
-                )
-                results.append(result)
-                self.config.add_result(result)
+        show_progress = (not self.no_progress) and bool(getattr(sys.stdout, 'isatty', lambda: False)())
+        with progress_for(len(file_list), enabled=show_progress, description="Traitement") as prog:
+            for idx, filename in enumerate(file_list, 1):
+                try:
+                    prog.update(message=os.path.basename(filename))
+                    result = process_single_file(
+                        filename,
+                        interactive=interactive,
+                        strict_mode=strict_mode,
+                        max_retries=max_retries,
+                    )
+                    results.append(result)
+                    self.config.add_result(result)
+
+                    success_str = "[OK]" if result.get('success') else "[FAIL]"
+                    score_str = f"{result.get('score', 0) * 100:.0f}%" if result.get('score') else "N/A"
+                    self.logger.info(f"[{idx}/{len(file_list)}] {success_str} {result.get('filename')} ({score_str})")
                 
-                success_str = "✓" if result.get('success') else "✗"
-                score_str = f"{result.get('score', 0) * 100:.0f}%" if result.get('score') else "N/A"
-                self.logger.info(f"[{idx}/{len(file_list)}] {success_str} {result.get('filename')} ({score_str})")
-            
-            except KeyboardInterrupt:
-                self.logger.warning("Interruption utilisateur - arrêt du traitement")
-                break
-            except Exception as e:
-                self.logger.error(f"Erreur traitement {filename}: {e}")
+                except KeyboardInterrupt:
+                    self.logger.warning("Interruption utilisateur - arrêt du traitement")
+                    break
+                except Exception as e:
+                    self.logger.error(f"Erreur traitement {filename}: {e}")
         
         return results
     

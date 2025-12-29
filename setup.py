@@ -7,7 +7,7 @@ from setuptools import setup
 
 def _read(fn):
     path = os.path.join(os.path.dirname(__file__), fn)
-    return open(path).read()
+    return open(path, encoding='utf-8').read()
 
 
 setup(
@@ -31,9 +31,14 @@ setup(
         'bdnex.ui'
     ],
     package_data={  # Optional
-        "bdnex.conf": ["*.json",
-                       "*.ini",
-                       "ComicInfo.xsd"],
+        "bdnex.conf": [
+            "*.json",
+            "*.ini",
+            "*.yaml",
+            "*.yml",
+            "*.conf",
+            "ComicInfo.xsd",
+        ],
     },
     entry_points={
         'console_scripts': [
@@ -43,7 +48,6 @@ setup(
 
     install_requires=[
         'InquirerPy',
-        'argparse',
         'beautifulsoup4',
         'duckduckgo-search',
         'html5lib',  # bs4 dependency
@@ -56,6 +60,7 @@ setup(
         'pyyaml',
         'rapidfuzz',
         'rarfile',
+        'rich',
         'tenacity',
         'termcolor',
         'thefuzz',

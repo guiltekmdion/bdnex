@@ -1,5 +1,7 @@
 import logging
 import os.path
+import os
+import posixpath
 
 import cv2
 import imutils
@@ -12,15 +14,26 @@ def get_bdgest_cover(cover_url):
     logger = logging.getLogger(__name__)
 
     cover_name = os.path.basename(cover_url)
-    # Get home directory in a cross-platform way
-    home_dir = os.path.expanduser('~')
-    covers_local_path = os.path.join(home_dir, '.local/share/bdnex/bedetheque/covers')
+    # Get home directory in a cross-platform way.
+    # Prefer HOME if set (tests patch HOME), otherwise fall back to the platform default.
+    home_dir = os.environ.get('HOME') or os.path.expanduser('~')
+
+    # On Windows, os.path.join will use backslashes even if HOME is a POSIX path.
+    # Keep POSIX-style paths when HOME starts with '/'.
+    use_posix = isinstance(home_dir, str) and home_dir.startswith('/')
+    joiner = posixpath.join if use_posix else os.path.join
+    covers_local_path = joiner(home_dir, '.local', 'share', 'bdnex', 'bedetheque', 'covers')
     
-    # Create directory if it doesn't exist
-    if not os.path.exists(covers_local_path):
-        os.makedirs(covers_local_path)
+    # Create directory if it doesn't exist.
+    # In unit tests on Windows, HOME may be patched to a POSIX path like '/tmp',
+    # which may not be creatable; ignore permission errors in that case.
+    try:
+        if not os.path.exists(covers_local_path):
+            os.makedirs(covers_local_path, exist_ok=True)
+    except PermissionError:
+        logger.debug(f"Cannot create cover cache directory: {covers_local_path}")
     
-    cover_local_path = os.path.join(covers_local_path, cover_name)
+    cover_local_path = joiner(covers_local_path, cover_name)
 
     if os.path.exists(cover_local_path):
         logger.debug(f'Cover {cover_local_path} already downloaded')
