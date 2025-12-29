@@ -466,8 +466,8 @@ class ChallengeUI:
                 }}
                 
                 function selectNone() {{
-                    // Send special marker for "none of these"
-                    fetch('/select?idx=0')
+                    // Send special marker for "none of these" (-1 means no selection)
+                    fetch('/select?idx=-1')
                         .then(response => response.json())
                         .then(data => {{
                             if (data.status === 'ok') {{
@@ -533,11 +533,11 @@ class ChallengeUI:
                     if 'idx' in params:
                         try:
                             idx_val = int(params['idx'][0])
-                            if idx_val == 0:
-                                # User selected "none of these"
+                            if idx_val == -1:
+                                # User selected "Chercher manuellement"
                                 selected['idx'] = None
                             else:
-                                selected['idx'] = idx_val - 1  # Convert to 0-based
+                                selected['idx'] = idx_val  # Keep 0-based
                             
                             self.send_response(200)
                             self.send_header('Content-type', 'application/json')
