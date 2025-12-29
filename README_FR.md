@@ -330,25 +330,34 @@ bdnex/
 ```mermaid
 graph TB
     subgraph CLI["Interface Utilisateur"]
-        UI[ui/__init__.py<br/>CLI & Arguments]
+        UI["ui/__init__.py
+        CLI & Arguments"]
     end
     
     subgraph Core["Bibliothèque Principale"]
-        BDGEST[bdgest.py<br/>Web Scraper & Correspondance]
-        COVER[cover.py<br/>Opérations Image]
-        ARCHIVE[archive_tools.py<br/>Gestionnaire CBZ/CBR]
-        COMICRACK[comicrack.py<br/>Générateur ComicInfo.xml]
-        UTILS[utils.py<br/>Utilitaires & Config]
+        BDGEST["bdgest.py
+        Web Scraper & Correspondance"]
+        COVER["cover.py
+        Opérations Image"]
+        ARCHIVE["archive_tools.py
+        Gestionnaire CBZ/CBR"]
+        COMICRACK["comicrack.py
+        Générateur ComicInfo.xml"]
+        UTILS["utils.py
+        Utilitaires & Config"]
     end
     
     subgraph External["Ressources Externes"]
-        BEDETHEQUE[(bedetheque.com<br/>Source Métadonnées)]
-        CACHE[(Cache Local<br/>~/.local/share/bdnex)]
-        CONFIG[(Configuration<br/>~/.config/bdnex)]
+        BEDETHEQUE[("bedetheque.com
+        Source Métadonnées")]
+        CACHE[("Cache Local
+        ~/.local/share/bdnex")]
+        CONFIG[("Configuration
+        ~/.config/bdnex")]
     end
     
     subgraph Files["Fichiers BD"]
-        CBZ[Fichiers CBZ/CBR]
+        CBZ["Fichiers CBZ/CBR"]
     end
     
     UI --> BDGEST
@@ -438,7 +447,7 @@ sequenceDiagram
     User->>CLI: bdnex -f bd.cbz
     CLI->>FS: Lecture fichier BD
     FS-->>CLI: Info fichier
-    CLI->>BDG: Extraction & correspondance nom
+    CLI->>BDG: Extraction et correspondance nom
     
     BDG->>CACHE: Vérifier cache sitemap
     alt Sitemap en cache
@@ -449,7 +458,7 @@ sequenceDiagram
         BDG->>CACHE: Stocker sitemap
     end
     
-    BDG->>BDG: Correspondance floue (Levenshtein)
+    BDG->>BDG: Correspondance floue Levenshtein
     BDG->>WEB: Scraper page album
     WEB-->>BDG: Métadonnées HTML
     BDG->>BDG: Parser métadonnées
@@ -464,7 +473,7 @@ sequenceDiagram
     ARC->>FS: Lire depuis CBZ/CBR
     FS-->>ARC: Image couverture
     
-    CLI->>COV: Comparer couvertures (SIFT)
+    CLI->>COV: Comparer couvertures SIFT
     COV-->>CLI: Pourcentage similarité
     
     alt Correspondance haute confiance

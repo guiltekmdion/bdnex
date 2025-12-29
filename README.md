@@ -329,25 +329,34 @@ bdnex/
 ```mermaid
 graph TB
     subgraph CLI["User Interface"]
-        UI[ui/__init__.py<br/>CLI & Arguments]
+        UI["ui/__init__.py
+        CLI & Arguments"]
     end
     
     subgraph Core["Core Library"]
-        BDGEST[bdgest.py<br/>Web Scraper & Matcher]
-        COVER[cover.py<br/>Image Operations]
-        ARCHIVE[archive_tools.py<br/>CBZ/CBR Handler]
-        COMICRACK[comicrack.py<br/>ComicInfo.xml Generator]
-        UTILS[utils.py<br/>Utilities & Config]
+        BDGEST["bdgest.py
+        Web Scraper & Matcher"]
+        COVER["cover.py
+        Image Operations"]
+        ARCHIVE["archive_tools.py
+        CBZ/CBR Handler"]
+        COMICRACK["comicrack.py
+        ComicInfo.xml Generator"]
+        UTILS["utils.py
+        Utilities & Config"]
     end
     
     subgraph External["External Resources"]
-        BEDETHEQUE[(bedetheque.com<br/>Metadata Source)]
-        CACHE[(Local Cache<br/>~/.local/share/bdnex)]
-        CONFIG[(Config<br/>~/.config/bdnex)]
+        BEDETHEQUE[("bedetheque.com
+        Metadata Source")]
+        CACHE[("Local Cache
+        ~/.local/share/bdnex")]
+        CONFIG[("Config
+        ~/.config/bdnex")]
     end
     
     subgraph Files["Comic Files"]
-        CBZ[CBZ/CBR Files]
+        CBZ["CBZ/CBR Files"]
     end
     
     UI --> BDGEST
@@ -432,7 +441,7 @@ sequenceDiagram
     User->>CLI: bdnex -f comic.cbz
     CLI->>FS: Read comic file
     FS-->>CLI: File info
-    CLI->>BDG: Extract & match filename
+    CLI->>BDG: Extract and match filename
     
     BDG->>CACHE: Check sitemap cache
     alt Sitemap cached
@@ -443,7 +452,7 @@ sequenceDiagram
         BDG->>CACHE: Store sitemap
     end
     
-    BDG->>BDG: Fuzzy match (Levenshtein)
+    BDG->>BDG: Fuzzy match Levenshtein
     BDG->>WEB: Scrape album page
     WEB-->>BDG: HTML metadata
     BDG->>BDG: Parse metadata
@@ -458,7 +467,7 @@ sequenceDiagram
     ARC->>FS: Read from CBZ/CBR
     FS-->>ARC: Cover image
     
-    CLI->>COV: Compare covers (SIFT)
+    CLI->>COV: Compare covers SIFT
     COV-->>CLI: Similarity percentage
     
     alt High confidence match
