@@ -23,9 +23,29 @@ from rapidfuzz import fuzz
 from termcolor import colored
 
 from bdnex.lib.utils import dump_json, load_json, bdnex_config
+from bdnex.lib.batch_config import SitemapCache
 
 BDGEST_MAPPING = resource_filename('bdnex', "conf/bdgest_mapping.json")
 BDGEST_SITEMAPS = resource_filename('bdnex', "conf/bedetheque_sitemap.json")
+
+# Global sitemap cache instance (singleton)
+_GLOBAL_SITEMAP_CACHE = None
+
+
+def get_sitemap_cache():
+    """Get or create global sitemap cache instance."""
+    global _GLOBAL_SITEMAP_CACHE
+    if _GLOBAL_SITEMAP_CACHE is None:
+        try:
+            bdnex_conf = bdnex_config()
+            share_path = os.path.expanduser(bdnex_conf['bdnex']['share_path'])
+            cache_dir = os.path.join(share_path, 'batch_results', 'cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            _GLOBAL_SITEMAP_CACHE = SitemapCache(cache_dir)
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Cannot create sitemap cache: {e}")
+            return None
+    return _GLOBAL_SITEMAP_CACHE
 
 
 class BdGestParse:
@@ -35,11 +55,11 @@ class BdGestParse:
         
         Args:
             interactive: Enable interactive mode (show prompts). If False, raise error on ambiguous matches
-            sitemap_cache: Optional SitemapCache instance for faster lookups
+            sitemap_cache: Optional SitemapCache instance for faster lookups (default: uses global instance)
         """
         self.logger = logging.getLogger(__name__)
         self.interactive = interactive
-        self.sitemap_cache = sitemap_cache
+        self.sitemap_cache = sitemap_cache or get_sitemap_cache()
 
         bdnex_conf = bdnex_config()
         share_path = os.path.expanduser(bdnex_conf['bdnex']['share_path'])
