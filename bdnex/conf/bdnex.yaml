@@ -20,3 +20,4 @@ paths:
 
 cover:
   match_percentage: 40
+  challenge_threshold: 0.70  # Show challenge UI if best match score < 70%
