@@ -164,6 +164,14 @@ def args():
                         '--verbose',
                         default='info',
                         help='Provide logging level. default=info')
+    
+    parser.add_argument('-b', '--batch', dest='batch', action='store_true', default=False,
+                        help="Batch mode: process multiple files and show consolidated challenge UI at end",
+                        required=False)
+    
+    parser.add_argument('-s', '--strict', dest='strict', action='store_true', default=False,
+                        help="Strict mode: reject low-confidence matches instead of prompting",
+                        required=False)
 
     init_logging()
 
