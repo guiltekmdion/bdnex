@@ -2,6 +2,9 @@ import os
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
+import shutil
+import cv2
+import numpy as np
 
 from bdnex.lib.cover import front_cover_similarity, get_bdgest_cover
 
@@ -57,6 +60,34 @@ class TestCover(unittest.TestCase):
         
         self.assertEqual(result, expected_path)
         mock_download.assert_called_once()
+
+    def test_front_cover_similarity_division_by_zero(self):
+        """Test front_cover_similarity handles division by zero"""
+        # This test ensures the exception handling works
+        # We need to create images that would cause zero keypoints
+        import cv2
+        import numpy as np
+        
+        # Create blank images that might have no features
+        blank_img = np.zeros((100, 100), dtype=np.uint8)
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            img1_path = os.path.join(temp_dir, 'blank1.jpg')
+            img2_path = os.path.join(temp_dir, 'blank2.jpg')
+            
+            cv2.imwrite(img1_path, blank_img)
+            cv2.imwrite(img2_path, blank_img)
+            
+            # This should handle the error and return 0
+            result = front_cover_similarity(img1_path, img2_path)
+            
+            # The function should return 0 or a valid percentage
+            self.assertIsInstance(result, (int, float))
+            self.assertGreaterEqual(result, 0)
+        finally:
+            # Cleanup
+            shutil.rmtree(temp_dir)
 
 
 if __name__ == '__main__':
