@@ -289,11 +289,20 @@ def main():
     # Database-aware CLI commands (Phase 2A)
     cli_manager = CLISessionManager()
     session_handled = cli_manager.handle_cli_session_args(vargs)
+    
+    # Handle different return types from CLI manager
+    resume_session_id = None
     if session_handled is True:
+        # Command completed successfully (--list-sessions or --session-info)
         return
-    # If user requested session listing/info and it failed, stop here
-    if session_handled is False:
+    elif session_handled is False:
+        # Command failed
         return
+    elif isinstance(session_handled, tuple) and session_handled[0] == 'resume':
+        # Resume mode requested
+        resume_session_id = session_handled[1]
+        logger.info(f"Resuming session {resume_session_id}...")
+        # Continue processing with resume mode enabled
 
     # Determine skip/force flags
     skip_processed = bool(vargs.skip_processed) and not bool(getattr(vargs, 'force_reprocess', False))
@@ -321,6 +330,18 @@ def main():
             use_database=True,
             skip_processed=skip_processed,
         )
+        
+        # If resuming a session, load files from that session
+        if resume_session_id is not None:
+            logger.info(f"Chargement de la session {resume_session_id}...")
+            files = processor.load_session_files(resume_session_id)
+            if not files:
+                logger.warning("Aucun fichier à reprendre dans cette session")
+                return
+            # Use the resume_session to create a new child session
+            new_session_id = processor.db.resume_session(resume_session_id)
+            processor.session_id = new_session_id
+            logger.info(f"Session reprise avec nouvel ID: {new_session_id}")
         
         # Process files (parallel if multiple workers)
         if processor.config.num_workers > 1 and len(files) > 1:

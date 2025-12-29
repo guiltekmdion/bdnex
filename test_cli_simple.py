@@ -193,7 +193,8 @@ def test_6_cli_args():
     args.session_info = None
     args.resume_session = session_id
     result = manager.handle_cli_session_args(args)
-    assert result is True
+    # Resume now returns tuple ('resume', session_id)
+    assert isinstance(result, tuple) and result[0] == 'resume' and result[1] == session_id
     manager.db.conn.close()
     
     cleanup_test_db(db_path)

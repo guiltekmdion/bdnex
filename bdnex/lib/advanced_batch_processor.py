@@ -69,6 +69,33 @@ class AdvancedBatchProcessor:
                         f"mode={'batch' if batch_mode else 'interactif'}, "
                         f"mode={'strict' if strict_mode else 'normal'}")
     
+    def load_session_files(self, session_id: int) -> List[str]:
+        """
+        Load unprocessed files from a previous session.
+        
+        Args:
+            session_id: Session ID to resume
+            
+        Returns:
+            List of file paths that haven't been processed yet
+        """
+        if not self.db:
+            self.logger.error("Database not available, cannot load session files")
+            return []
+        
+        try:
+            # Get all files from the session
+            all_files = self.db.get_session_files(session_id)
+            
+            # Filter to only unprocessed files
+            unprocessed = [f for f in all_files if not f['processed']]
+            
+            self.logger.info(f"Session {session_id}: {len(unprocessed)} files remaining to process")
+            return [f['file_path'] for f in unprocessed]
+        except Exception as e:
+            self.logger.error(f"Error loading session files: {e}")
+            return []
+    
     def process_files_parallel(
         self,
         file_list: List[str],
