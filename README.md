@@ -7,6 +7,8 @@
 
 **BDneX** is a French comics (BD) metadata tagger and library manager. It automatically retrieves metadata from [bedetheque.com](https://bedetheque.com) and embeds it into your comic files using the ComicRack standard format.
 
+📖 [Version française](README_FR.md) | 🗺️ [Roadmap](ROADMAP.md)
+
 ## Table of Contents
 - [Motivation](#motivation)
 - [Features](#features)
