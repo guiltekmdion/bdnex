@@ -48,6 +48,19 @@ class BdGestParse:
             os.makedirs(self.album_metadata_json_path)
 
         self.album_metadata_html_path = os.path.join(self.bdnex_local_path, 'albums_html')
+    
+    @staticmethod
+    def parse_date_from_depot_legal(depot_legal_str):
+        """Parse Dépot légal string and return datetime object."""
+        if not depot_legal_str:
+            return None
+        try:
+            return dateutil.parser.parse(depot_legal_str)
+        except Exception:
+            try:
+                return datetime.strptime(depot_legal_str, '(Parution le %d/%m/%Y)')
+            except Exception:
+                return None
         if not os.path.exists(self.album_metadata_html_path):
             os.makedirs(self.album_metadata_html_path)
 

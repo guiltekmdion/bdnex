@@ -366,6 +366,29 @@ class ChallengeUI:
                 .selected-info.visible {{
                     display: block;
                 }}
+                
+                .no-match-section {{
+                    text-align: center;
+                    padding: 30px;
+                    margin-top: 40px;
+                    border-top: 2px solid #e0e0e0;
+                }}
+                
+                .btn-none-of-these {{
+                    padding: 12px 24px;
+                    background: #f44336;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 16px;
+                    font-weight: 600;
+                    transition: background 0.3s ease;
+                }}
+                
+                .btn-none-of-these:hover {{
+                    background: #d32f2f;
+                }}
             </style>
         </head>
         <body>
@@ -392,6 +415,12 @@ class ChallengeUI:
                         <div class="candidates-grid">
                             {candidates_html}
                         </div>
+                    </div>
+                    
+                    <div class="no-match-section">
+                        <h3>None of these look right?</h3>
+                        <p>Search manually on Bédéthèque for the correct album</p>
+                        <button class="btn-none-of-these" onclick="selectNone()">Search Manually</button>
                     </div>
                 </div>
                 
@@ -434,6 +463,20 @@ class ChallengeUI:
                     
                     // Auto-scroll to top
                     window.scrollTo({{ top: 0, behavior: 'smooth' }});
+                }}
+                
+                function selectNone() {{
+                    // Send special marker for "none of these"
+                    fetch('/select?idx=0')
+                        .then(response => response.json())
+                        .then(data => {{
+                            if (data.status === 'ok') {{
+                                console.log('No selection made, closing window');
+                                // Close window after brief delay
+                                setTimeout(() => window.close(), 500);
+                            }}
+                        }})
+                        .catch(err => console.error('Error sending selection:', err));
                 }}
                 
                 // Keyboard shortcuts
@@ -489,7 +532,13 @@ class ChallengeUI:
                     params = parse_qs(parsed_path.query)
                     if 'idx' in params:
                         try:
-                            selected['idx'] = int(params['idx'][0]) - 1  # Convert to 0-based
+                            idx_val = int(params['idx'][0])
+                            if idx_val == 0:
+                                # User selected "none of these"
+                                selected['idx'] = None
+                            else:
+                                selected['idx'] = idx_val - 1  # Convert to 0-based
+                            
                             self.send_response(200)
                             self.send_header('Content-type', 'application/json')
                             self.end_headers()

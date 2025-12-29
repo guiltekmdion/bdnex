@@ -56,13 +56,23 @@ def add_metadata_from_bdgest(filename):
             cover_similarities.append(sim)
             candidate_covers.append(cover_web_fp_candidate)
             
+            # Extract year from Dépot_légal if present
+            candidate_year = -1
+            try:
+                if 'Dépot_légal' in bd_meta_candidate:
+                    published_date = parser.parse_date_from_depot_legal(bd_meta_candidate['Dépot_légal'])
+                    if published_date:
+                        candidate_year = published_date.year
+            except:
+                pass
+            
             # Build candidate metadata dict
             candidate_meta = {
-                'title': bd_meta_candidate.get('title', 'Unknown'),
-                'volume': bd_meta_candidate.get('tome', -1),
-                'editor': bd_meta_candidate.get('publisher', 'Unknown'),
-                'year': bd_meta_candidate.get('year', -1),
-                'pages': bd_meta_candidate.get('page_count', '?'),
+                'title': bd_meta_candidate.get('Titre', 'Unknown'),
+                'volume': bd_meta_candidate.get('Tome', -1),
+                'editor': bd_meta_candidate.get('Éditeur', 'Unknown'),
+                'year': candidate_year,
+                'pages': bd_meta_candidate.get('Planches', '?'),
                 'url': url,
                 'comicrack_meta': comicrack_meta_candidate,
                 'cover_path': cover_web_fp_candidate,
@@ -118,15 +128,15 @@ def add_metadata_from_bdgest(filename):
             filename_basename
         )
         
-        if selected_idx is not None and 0 <= selected_idx < len(challenge_candidates):
+        if selected_idx is not None and selected_idx >= 0 and selected_idx < len(challenge_candidates):
             selected_candidate = challenge_candidates[selected_idx][0]
             logger.info(f"User selected candidate: {selected_candidate['title']}")
             bdgest_meta = {k: v for k, v in selected_candidate.items() if k not in ['comicrack_meta', 'cover_path']}
             comicrack_meta = selected_candidate['comicrack_meta']
             cover_web_fp = selected_candidate['cover_path']
         else:
-            # Fallback to manual selection
-            logger.info(f"Looking manually for {colored(filename_basename, 'red', attrs=['bold'])}")
+            # Fallback to manual selection (user clicked "None of these")
+            logger.info(f"User rejected all candidates. Starting manual search for {colored(filename_basename, 'red', attrs=['bold'])}")
             album_url = BdGestParse().search_album_from_sitemaps_interactive()
             bdgest_meta, comicrack_meta = BdGestParse().parse_album_metadata_mobile(album_name, album_url=album_url)
             cover_web_fp = get_bdgest_cover(bdgest_meta["cover_url"])
