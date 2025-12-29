@@ -11,6 +11,7 @@ from urllib.parse import urlparse, parse_qs
 from bdnex.lib.archive_tools import archive_get_front_cover
 from bdnex.lib.bdgest import BdGestParse
 from bdnex.lib.comicrack import comicInfo
+from bdnex.lib.renaming import RenameManager
 from bdnex.lib.cover import front_cover_similarity, get_bdgest_cover
 from bdnex.lib.utils import yesno, args, bdnex_config
 from bdnex.lib.disambiguation import FilenameMetadataExtractor, CandidateScorer
@@ -19,6 +20,43 @@ from bdnex.ui.challenge import ChallengeUI
 from bdnex.ui.batch_challenge import BatchChallengeUI
 from pathlib import Path
 from termcolor import colored
+
+
+def handle_file_renaming(result, rename_manager, template, logger):
+    """
+    Handle file renaming after metadata has been applied.
+    
+    Args:
+        result: ProcessingResult containing filepath and metadata
+        rename_manager: RenameManager instance
+        template: Renaming template string
+        logger: Logger instance
+    
+    Returns:
+        Tuple (success, old_path, new_path)
+    """
+    if not result or not result.success or not hasattr(result, 'filepath'):
+        return False, None, None
+    
+    filepath = result.filepath
+    metadata = result.metadata if hasattr(result, 'metadata') else {}
+    
+    try:
+        success, old_path, new_path = rename_manager.rename_file(filepath, template, metadata)
+        
+        if success:
+            if old_path != new_path:
+                if rename_manager.dry_run:
+                    logger.info(f"[DRY-RUN] Renommage: {Path(old_path).name} → {Path(new_path).name}")
+                else:
+                    logger.info(f"Fichier renommé: {Path(old_path).name} → {Path(new_path).name}")
+            return True, old_path, new_path
+        else:
+            logger.warning(f"Échec du renommage: {new_path}")
+            return False, old_path, new_path
+    except Exception as e:
+        logger.error(f"Erreur lors du renommage: {e}")
+        return False, filepath, str(e)
 
 
 def add_metadata_from_bdgest(filename, batch_processor=None, interactive=True, strict_mode=False):
@@ -261,6 +299,11 @@ def add_metadata_from_bdgest(filename, batch_processor=None, interactive=True, s
         shutil.rmtree(cover_path)
 
         logger.info(f"Traitement de l'album terminé")
+        
+        # Store final filepath in result for potential renaming
+        if result:
+            result.filepath = filename
+        
         return result
 
     except Exception as e:
@@ -373,6 +416,34 @@ def main():
         
         # Print summary and save logs
         processor.print_summary(results)
+        
+        # Handle file renaming if requested
+        if vargs.rename_template:
+            logger.info("\n=== Renommage des fichiers ===")
+            rename_manager = RenameManager(
+                backup_enabled=not vargs.no_backup,
+                dry_run=vargs.rename_dry_run
+            )
+            
+            renamed_count = 0
+            failed_count = 0
+            
+            for result in results:
+                if result and result.success:
+                    success, old_path, new_path = handle_file_renaming(
+                        result, rename_manager, vargs.rename_template, logger
+                    )
+                    if success and old_path != new_path:
+                        renamed_count += 1
+                    elif not success:
+                        failed_count += 1
+            
+            if vargs.rename_dry_run:
+                logger.info(f"\n[DRY-RUN] {renamed_count} fichier(s) seraient renommés")
+            else:
+                logger.info(f"\n{renamed_count} fichier(s) renommé(s) avec succès")
+                if failed_count > 0:
+                    logger.warning(f"{failed_count} fichier(s) n'ont pas pu être renommés")
 
     elif vargs.input_file:
         file = vargs.input_file
@@ -390,6 +461,21 @@ def main():
         )
         if result:
             logger.info(f"Résultat: {result.filename} - {'✓ Succès' if result.success else '✗ Échoué'}")
+            
+            # Handle file renaming if requested
+            if vargs.rename_template and result.success:
+                rename_manager = RenameManager(
+                    backup_enabled=not vargs.no_backup,
+                    dry_run=vargs.rename_dry_run
+                )
+                success, old_path, new_path = handle_file_renaming(
+                    result, rename_manager, vargs.rename_template, logger
+                )
+                if success and old_path != new_path:
+                    if vargs.rename_dry_run:
+                        logger.info(f"[DRY-RUN] Fichier serait renommé")
+                    else:
+                        logger.info(f"Fichier renommé avec succès")
 
 
 

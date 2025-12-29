@@ -193,6 +193,19 @@ def args():
     parser.add_argument('--force', dest='force_reprocess', action='store_true', default=False,
                         help="Force reprocessing even if file is already in database",
                         required=False)
+    
+    # Renaming options
+    parser.add_argument('--rename', dest='rename_template', type=str, default=None,
+                        help="Rename files using template (e.g., '%%Series - Tome %%Number - %%Title')",
+                        required=False)
+    
+    parser.add_argument('--rename-dry-run', dest='rename_dry_run', action='store_true', default=False,
+                        help="Preview renaming without actually renaming files",
+                        required=False)
+    
+    parser.add_argument('--no-backup', dest='no_backup', action='store_true', default=False,
+                        help="Disable backup creation when renaming files",
+                        required=False)
 
     init_logging()
 
