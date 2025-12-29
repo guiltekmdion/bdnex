@@ -172,6 +172,27 @@ def args():
     parser.add_argument('-s', '--strict', dest='strict', action='store_true', default=False,
                         help="Strict mode: reject low-confidence matches instead of prompting",
                         required=False)
+    
+    # Phase 2A: CLI Integration - Database-related flags
+    parser.add_argument('--resume', dest='resume_session', type=int, default=None,
+                        help="Resume a previous batch processing session by ID",
+                        required=False)
+    
+    parser.add_argument('--skip-processed', dest='skip_processed', action='store_true', default=False,
+                        help="Skip files that have already been processed (requires database)",
+                        required=False)
+    
+    parser.add_argument('--list-sessions', dest='list_sessions', action='store_true', default=False,
+                        help="List all batch processing sessions stored in database",
+                        required=False)
+    
+    parser.add_argument('--session-info', dest='session_info', type=int, default=None,
+                        help="Show detailed statistics for a specific session ID",
+                        required=False)
+    
+    parser.add_argument('--force', dest='force_reprocess', action='store_true', default=False,
+                        help="Force reprocessing even if file is already in database",
+                        required=False)
 
     init_logging()
 

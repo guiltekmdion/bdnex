@@ -1,5 +1,6 @@
 import os
 import time
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -126,6 +127,62 @@ class TestBdGestParse(unittest.TestCase):
         mocked_prompt.return_value = [["love peach"]]
         res = BdGestParse().search_album_from_sitemaps_interactive()
         self.assertEqual("https://m.bedetheque.com/BD-Love-Peach-250200.html", res)
+
+    def test_bdgest_initialization_creates_directories(self):
+        """Test that BdGestParse.__init__ creates necessary directories"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_share_path = os.path.join(tmpdir, 'bdnex_test')
+            
+            with patch('bdnex.lib.bdgest.bdnex_config') as mock_config:
+                mock_config.return_value = {
+                    "bdnex": {"share_path": test_share_path}
+                }
+                
+                # Mock download_sitemaps to avoid network calls
+                with patch.object(BdGestParse, 'download_sitemaps'):
+                    # Create at least one sitemap file to avoid download trigger
+                    sitemaps_dir = os.path.join(test_share_path, 'bedetheque', 'sitemaps')
+                    os.makedirs(sitemaps_dir, exist_ok=True)
+                    with open(os.path.join(sitemaps_dir, 'dummy.xml'), 'w') as f:
+                        f.write('<?xml version="1.0"?><urlset></urlset>')
+                    
+                    bdgest = BdGestParse()
+                    
+                    # Verify all directories are created
+                    self.assertTrue(os.path.exists(bdgest.bdnex_local_path))
+                    self.assertTrue(os.path.exists(bdgest.sitemaps_path))
+                    self.assertTrue(os.path.exists(bdgest.album_metadata_json_path))
+                    self.assertTrue(os.path.exists(bdgest.album_metadata_html_path))
+                    self.assertTrue(os.path.exists(bdgest.serie_metadata_json_path))
+                    self.assertTrue(os.path.exists(bdgest.serie_metadata_html_path))
+
+    @patch('bdnex.lib.bdgest.requests.get')
+    def test_download_sitemaps(self, mock_get):
+        """Test download_sitemaps method"""
+        mock_response = MagicMock()
+        mock_response.content = b'<?xml version="1.0"?><urlset></urlset>'
+        mock_get.return_value = mock_response
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_share_path = os.path.join(tmpdir, 'bdnex_test')
+            
+            with patch('bdnex.lib.bdgest.bdnex_config') as mock_config:
+                mock_config.return_value = {
+                    "bdnex": {"share_path": test_share_path}
+                }
+                
+                bdgest = BdGestParse()
+                
+                # Clear sitemaps to force download
+                for file in os.listdir(bdgest.sitemaps_path):
+                    os.remove(os.path.join(bdgest.sitemaps_path, file))
+                
+                # Download only first sitemap to speed up test
+                with patch.object(bdgest, 'generate_sitemaps_url', return_value=['https://example.com/map.xml']):
+                    bdgest.download_sitemaps()
+                
+                # Verify download was called
+                mock_get.assert_called()
 
 
 if __name__ == '__main__':

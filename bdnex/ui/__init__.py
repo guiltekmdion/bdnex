@@ -281,9 +281,22 @@ def main():
     """Main entry point with advanced batch processing support."""
     from bdnex.lib.batch_config import SitemapCache
     from bdnex.lib.advanced_batch_processor import AdvancedBatchProcessor
+    from bdnex.lib.cli_session_manager import CLISessionManager
     
     vargs = args()
     logger = logging.getLogger(__name__)
+
+    # Database-aware CLI commands (Phase 2A)
+    cli_manager = CLISessionManager()
+    session_handled = cli_manager.handle_cli_session_args(vargs)
+    if session_handled is True:
+        return
+    # If user requested session listing/info and it failed, stop here
+    if session_handled is False:
+        return
+
+    # Determine skip/force flags
+    skip_processed = bool(vargs.skip_processed) and not bool(getattr(vargs, 'force_reprocess', False))
 
     if vargs.init:
         BdGestParse().download_sitemaps()
@@ -305,12 +318,15 @@ def main():
             batch_mode=vargs.batch,
             strict_mode=vargs.strict,
             num_workers=4,  # Default 4 workers
+            use_database=True,
+            skip_processed=skip_processed,
         )
         
         # Process files (parallel if multiple workers)
         if processor.config.num_workers > 1 and len(files) > 1:
             results = processor.process_files_parallel(
                 files,
+                directory=dirpath,
                 interactive=not vargs.batch,  # Interactive only if not batch mode
                 strict_mode=vargs.strict,
                 max_retries=3,
@@ -339,6 +355,12 @@ def main():
 
     elif vargs.input_file:
         file = vargs.input_file
+
+        # Skip if already processed and user requested skip
+        if skip_processed and cli_manager.db and cli_manager.db.is_processed(file):
+            logger.info(f"Fichier déjà traité, ignoré grâce à --skip-processed: {file}")
+            return
+
         result = add_metadata_from_bdgest(
             file,
             batch_processor=None,
