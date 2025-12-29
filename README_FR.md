@@ -325,6 +325,60 @@ bdnex/
 └── environment.yml
 ```
 
+#### Diagramme d'architecture
+
+```mermaid
+graph TB
+    subgraph CLI["Interface Utilisateur"]
+        UI[ui/__init__.py<br/>CLI & Arguments]
+    end
+    
+    subgraph Core["Bibliothèque Principale"]
+        BDGEST[bdgest.py<br/>Web Scraper & Correspondance]
+        COVER[cover.py<br/>Opérations Image]
+        ARCHIVE[archive_tools.py<br/>Gestionnaire CBZ/CBR]
+        COMICRACK[comicrack.py<br/>Générateur ComicInfo.xml]
+        UTILS[utils.py<br/>Utilitaires & Config]
+    end
+    
+    subgraph External["Ressources Externes"]
+        BEDETHEQUE[(bedetheque.com<br/>Source Métadonnées)]
+        CACHE[(Cache Local<br/>~/.local/share/bdnex)]
+        CONFIG[(Configuration<br/>~/.config/bdnex)]
+    end
+    
+    subgraph Files["Fichiers BD"]
+        CBZ[Fichiers CBZ/CBR]
+    end
+    
+    UI --> BDGEST
+    UI --> COVER
+    UI --> ARCHIVE
+    UI --> COMICRACK
+    UI --> UTILS
+    
+    BDGEST --> BEDETHEQUE
+    BDGEST --> CACHE
+    BDGEST --> COMICRACK
+    
+    COVER --> BEDETHEQUE
+    COVER --> CACHE
+    COVER --> ARCHIVE
+    
+    ARCHIVE --> CBZ
+    
+    COMICRACK --> ARCHIVE
+    COMICRACK --> CBZ
+    
+    UTILS --> CONFIG
+    UTILS --> CACHE
+    
+    style CLI fill:#e1f5ff
+    style Core fill:#fff3e0
+    style External fill:#f3e5f5
+    style Files fill:#e8f5e9
+```
+
 ### Composants clés
 
 1. **bdgest.py** : 
@@ -365,6 +419,68 @@ Fichier BD → Extraction du nom → Correspondance floue → Scrape des métado
                             Génération ComicInfo.xml
                                      ↓
                             Intégration dans archive → Fichier BD mis à jour
+```
+
+#### Diagramme du flux de travail
+
+```mermaid
+sequenceDiagram
+    actor User as Utilisateur
+    participant CLI as Interface CLI
+    participant FS as Système Fichiers
+    participant BDG as bdgest.py
+    participant CACHE as Cache Local
+    participant WEB as bedetheque.com
+    participant COV as cover.py
+    participant ARC as archive_tools.py
+    participant CR as comicrack.py
+    
+    User->>CLI: bdnex -f bd.cbz
+    CLI->>FS: Lecture fichier BD
+    FS-->>CLI: Info fichier
+    CLI->>BDG: Extraction & correspondance nom
+    
+    BDG->>CACHE: Vérifier cache sitemap
+    alt Sitemap en cache
+        CACHE-->>BDG: Retourner données sitemap
+    else Pas de cache
+        BDG->>WEB: Télécharger sitemap
+        WEB-->>BDG: Données sitemap
+        BDG->>CACHE: Stocker sitemap
+    end
+    
+    BDG->>BDG: Correspondance floue (Levenshtein)
+    BDG->>WEB: Scraper page album
+    WEB-->>BDG: Métadonnées HTML
+    BDG->>BDG: Parser métadonnées
+    BDG->>CACHE: Stocker métadonnées JSON
+    
+    CLI->>COV: Télécharger couverture
+    COV->>WEB: Récupérer image couverture
+    WEB-->>COV: Image couverture
+    COV->>CACHE: Stocker couverture
+    
+    CLI->>ARC: Extraire couverture BD
+    ARC->>FS: Lire depuis CBZ/CBR
+    FS-->>ARC: Image couverture
+    
+    CLI->>COV: Comparer couvertures (SIFT)
+    COV-->>CLI: Pourcentage similarité
+    
+    alt Correspondance haute confiance
+        CLI->>CR: Générer ComicInfo.xml
+        CR->>CR: Valider contre schéma
+        CR->>ARC: Intégrer XML dans archive
+        ARC->>FS: Mettre à jour CBZ/CBR
+        CLI-->>User: Message succès
+    else Faible confiance
+        CLI-->>User: Demander confirmation manuelle
+        User->>CLI: Fournir URL ou confirmer
+        CLI->>CR: Générer ComicInfo.xml
+        CR->>ARC: Intégrer XML dans archive
+        ARC->>FS: Mettre à jour CBZ/CBR
+        CLI-->>User: Message succès
+    end
 ```
 
 ## Contribuer
