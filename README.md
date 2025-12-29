@@ -329,34 +329,25 @@ bdnex/
 ```mermaid
 graph TB
     subgraph CLI["User Interface"]
-        UI["ui/__init__.py
-        CLI & Arguments"]
+        UI[ui/__init__.py<br>CLI & Arguments]
     end
     
     subgraph Core["Core Library"]
-        BDGEST["bdgest.py
-        Web Scraper & Matcher"]
-        COVER["cover.py
-        Image Operations"]
-        ARCHIVE["archive_tools.py
-        CBZ/CBR Handler"]
-        COMICRACK["comicrack.py
-        ComicInfo.xml Generator"]
-        UTILS["utils.py
-        Utilities & Config"]
+        BDGEST[bdgest.py<br>Web Scraper & Matcher]
+        COVER[cover.py<br>Image Operations]
+        ARCHIVE[archive_tools.py<br>CBZ/CBR Handler]
+        COMICRACK[comicrack.py<br>ComicInfo.xml Generator]
+        UTILS[utils.py<br>Utilities & Config]
     end
     
     subgraph External["External Resources"]
-        BEDETHEQUE[("bedetheque.com
-        Metadata Source")]
-        CACHE[("Local Cache
-        ~/.local/share/bdnex")]
-        CONFIG[("Config
-        ~/.config/bdnex")]
+        BEDETHEQUE[(bedetheque.com<br>Metadata Source)]
+        CACHE[(Local Cache<br>~/.local/share/bdnex)]
+        CONFIG[(Config<br>~/.config/bdnex)]
     end
     
     subgraph Files["Comic Files"]
-        CBZ["CBZ/CBR Files"]
+        CBZ[CBZ/CBR Files]
     end
     
     UI --> BDGEST
