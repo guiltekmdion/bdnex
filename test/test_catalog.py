@@ -34,13 +34,29 @@ class TestCatalogManager(unittest.TestCase):
     
     def tearDown(self):
         """Clean up test database."""
-        self.db.close()
-        os.unlink(self.temp_db.name)
+        # Fermer les connexions
+        if hasattr(self, 'catalog') and hasattr(self.catalog, 'db'):
+            self.catalog.db.conn.close()
+        if hasattr(self, 'db'):
+            self.db.conn.close()
+        # Supprimer le fichier de test
+        if hasattr(self, 'temp_db'):
+            try:
+                os.unlink(self.temp_db.name)
+            except:
+                pass  # Ignore si déjà supprimé
     
     def _populate_test_data(self):
         """Populate database with test data."""
-        # Créer une session
-        session_id = self.db.start_session('/test/dir', batch_mode=False, num_workers=1)
+        # Créer une session directement en SQL
+        cursor = self.db.conn.cursor()
+        cursor.execute("""
+            INSERT INTO processing_sessions (
+                directory, batch_mode, num_workers, status
+            ) VALUES (?, ?, ?, ?)
+        """, ('/test/dir', 0, 1, 'completed'))
+        session_id = cursor.lastrowid
+        self.db.conn.commit()
         
         # Ajouter des albums de test
         test_albums = [
@@ -140,23 +156,18 @@ class TestCatalogManager(unittest.TestCase):
             ))
             album_id = cursor.lastrowid
             
-            # Ajouter le fichier traité avec record_processing
-            self.db.record_processing(
-                file_path=album['file_path'],
-                session_id=session_id,
-                result={
-                    'bdgest_id': album_id,
-                    'status': 'success',
-                    'score': 95,
-                    'title': album['Title'],
-                    'series': album['Series'],
-                    'volume': album['Number'],
-                    'editor': album['Publisher'],
-                    'year': album['Year'],
-                    'isbn': album['ISBN'],
-                    'pages': album['Pages']
-                }
-            )
+            # Ajouter le fichier traité directement (sans hash car fichier n'existe pas)
+            cursor.execute("""
+                INSERT INTO processed_files (
+                    file_path, file_hash, file_size, bdgest_id, status, session_id,
+                    confidence_score, processed_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                album['file_path'], 'test_hash_' + str(album_id), 1000000,
+                album_id, 'success', session_id, 0.95
+            ))
+            
+            self.db.conn.commit()
     
     def test_list_by_series(self):
         """Test listing BDs by series."""
@@ -165,13 +176,11 @@ class TestCatalogManager(unittest.TestCase):
         # Vérifier qu'on a 3 séries
         self.assertEqual(len(results), 3)
         
-        # Vérifier que Lucky Luke est premier (2 albums)
-        self.assertEqual(results[0][0], 'Lucky Luke')
-        self.assertEqual(results[0][1], 2)
-        
-        # Vérifier que Asterix est second (2 albums)
-        self.assertEqual(results[1][0], 'Asterix')
-        self.assertEqual(results[1][1], 2)
+        # Vérifier qu'Asterix et Lucky Luke ont 2 albums chacun
+        series_counts = {row[0]: row[1] for row in results}
+        self.assertEqual(series_counts.get('Asterix'), 2)
+        self.assertEqual(series_counts.get('Lucky Luke'), 2)
+        self.assertEqual(series_counts.get('Tintin'), 1)
         
         # Vérifier que Tintin est troisième (1 album)
         self.assertEqual(results[2][0], 'Tintin')
