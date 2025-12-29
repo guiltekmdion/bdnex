@@ -89,19 +89,19 @@ class ChallengeUI:
                 
                 <div class="candidate-info">
                     <div class="info-row">
-                        <span class="info-label">Title:</span>
+                        <span class="info-label">Titre:</span>
                         <span class="info-value">{title}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Volume:</span>
+                        <span class="info-label">Tome:</span>
                         <span class="info-value">{volume}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Editor:</span>
+                        <span class="info-label">Éditeur:</span>
                         <span class="info-value">{editor}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Year:</span>
+                        <span class="info-label">Année:</span>
                         <span class="info-value">{year}</span>
                     </div>
                     <div class="info-row">
@@ -111,8 +111,8 @@ class ChallengeUI:
                 </div>
                 
                 <div class="candidate-actions">
-                    <button class="btn-select" onclick="selectCandidate({idx})">Select This</button>
-                    <a class="btn-bedetheque" href="{url}" target="_blank">View on Bédéthèque</a>
+                    <button class="btn-select" onclick="selectCandidate({idx})">Choisir celui-ci</button>
+                    <a class="btn-bedetheque" href="{url}" target="_blank">Voir sur Bédéthèque</a>
                 </div>
             </div>
             """
@@ -394,38 +394,38 @@ class ChallengeUI:
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🎯 Album Disambiguation Challenge</h1>
-                    <p>File: <strong>{filename}</strong></p>
+                    <h1>🎯 Défi de Désambiguïsation d'Album</h1>
+                    <p>Fichier: <strong>{filename}</strong></p>
                 </div>
                 
                 <div class="content">
                     <div class="selected-info" id="selectedInfo">
-                        ✓ Selected: <strong id="selectedTitle"></strong>
+                        ✓ Sélectionné: <strong id="selectedTitle"></strong>
                     </div>
                     
                     <div class="local-section">
-                        <h2>📖 Your Local Cover</h2>
+                        <h2>📖 Votre Couverture Locale</h2>
                         <div class="local-cover">
                             <img src="{local_cover_b64}" alt="Local cover" />
                         </div>
                     </div>
                     
                     <div class="candidates-section">
-                        <h2>🔍 Top Candidates from Bédéthèque</h2>
+                        <h2>🔍 Meilleurs Candidats de Bédéthèque</h2>
                         <div class="candidates-grid">
                             {candidates_html}
                         </div>
                     </div>
                     
                     <div class="no-match-section">
-                        <h3>None of these look right?</h3>
-                        <p>Search manually on Bédéthèque for the correct album</p>
-                        <button class="btn-none-of-these" onclick="selectNone()">Search Manually</button>
+                        <h3>Aucun ne vous convient ?</h3>
+                        <p>Cherchez manuellement sur Bédéthèque le bon album</p>
+                        <button class="btn-none-of-these" onclick="selectNone()">Chercher Manuellement</button>
                     </div>
                 </div>
                 
                 <div class="footer">
-                    <p>Select the correct album based on cover and metadata. Your selection will be saved.</p>
+                    <p>Sélectionnez l'album correct en fonction de la couverture et des métadonnées. Votre sélection sera sauvegardée.</p>
                 </div>
             </div>
             
@@ -563,7 +563,7 @@ class ChallengeUI:
         
         with socketserver.TCPServer(("", port), handler) as httpd:
             url = f"http://localhost:{port}/"
-            self.logger.info(f"Challenge server running at {url}")
+            self.logger.info(f"Serveur de défi en cours d'exécution sur {url}")
             
             try:
                 webbrowser.open(url)
@@ -575,16 +575,16 @@ class ChallengeUI:
                 
                 while time.time() - start_time < timeout:
                     if selected['idx'] is not None:
-                        self.logger.info(f"User selected candidate {selected['idx'] + 1}")
+                        self.logger.info(f"Candidat sélectionné par l'utilisateur {selected['idx'] + 1}")
                         return selected['idx']
-                    httpd.handle_request()  # Handle one request
+                    httpd.handle_request()  # Gérer une seule requête
                     time.sleep(0.1)
                 
-                self.logger.warning("Challenge timeout - no selection made")
+                self.logger.warning("Délai d'attente du défi dépassé - aucune sélection effectuée")
                 return None
                 
             except KeyboardInterrupt:
-                self.logger.info("Challenge cancelled by user")
+                self.logger.info("Défi annulé par l'utilisateur")
                 return None
     
     @staticmethod

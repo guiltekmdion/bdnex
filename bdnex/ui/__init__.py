@@ -26,7 +26,7 @@ def add_metadata_from_bdgest(filename):
                               'red', attrs=['bold'])
 
     logger.info(start_separator)
-    logger.info(f"Processing {filename}")
+    logger.info(f"Traitement de {filename}")
 
     album_name = os.path.splitext(os.path.basename(filename))[0]
     filename_basename = os.path.basename(filename)
@@ -100,20 +100,20 @@ def add_metadata_from_bdgest(filename):
     
     best_candidate, best_score = scored[0]
     
-    logger.info(f"Top match score: {best_score * 100:.1f}%")
+    logger.info(f"Score de meilleure correspondance: {best_score * 100:.1f}%")
     
     # Determine if we need challenge UI
     challenge_threshold = bdnex_conf['cover'].get('challenge_threshold', 0.70)  # Default 70%
     
     if best_score >= challenge_threshold:
         # High confidence, use automatically
-        logger.info(f"High confidence match ({best_score * 100:.1f}%). Using automatically.")
+        logger.info(f"Correspondance de haute confiance ({best_score * 100:.1f}%). Utilisation automatique.")
         bdgest_meta = {k: v for k, v in best_candidate.items() if k not in ['comicrack_meta', 'cover_path']}
         comicrack_meta = best_candidate['comicrack_meta']
         cover_web_fp = best_candidate['cover_path']
     else:
         # Low confidence, show challenge
-        logger.warning(f"Low confidence match ({best_score * 100:.1f}%). Showing challenge UI.")
+        logger.warning(f"Correspondance de faible confiance ({best_score * 100:.1f}%). Affichage de l'interface de désambiguation.")
         
         # Prepare candidates for challenge (top 3)
         challenge_candidates = []
@@ -130,13 +130,13 @@ def add_metadata_from_bdgest(filename):
         
         if selected_idx is not None and selected_idx >= 0 and selected_idx < len(challenge_candidates):
             selected_candidate = challenge_candidates[selected_idx][0]
-            logger.info(f"User selected candidate: {selected_candidate['title']}")
+            logger.info(f"Candidat sélectionné par l'utilisateur: {selected_candidate['title']}")
             bdgest_meta = {k: v for k, v in selected_candidate.items() if k not in ['comicrack_meta', 'cover_path']}
             comicrack_meta = selected_candidate['comicrack_meta']
             cover_web_fp = selected_candidate['cover_path']
         else:
             # Fallback to manual selection (user clicked "None of these")
-            logger.info(f"User rejected all candidates. Starting manual search for {colored(filename_basename, 'red', attrs=['bold'])}")
+            logger.info(f"Utilisateur a rejeté tous les candidats. Début de la recherche manuelle pour {colored(filename_basename, 'red', attrs=['bold'])}")
             album_url = BdGestParse().search_album_from_sitemaps_interactive()
             bdgest_meta, comicrack_meta = BdGestParse().parse_album_metadata_mobile(album_name, album_url=album_url)
             cover_web_fp = get_bdgest_cover(bdgest_meta["cover_url"])
@@ -160,7 +160,7 @@ def add_metadata_from_bdgest(filename):
     cover_path = Path(cover_archive_fp).parent.as_posix()
     shutil.rmtree(cover_path)
 
-    logger.info(f"Processing album done")
+    logger.info(f"Traitement de l'album terminé")
 
 
 def main():
