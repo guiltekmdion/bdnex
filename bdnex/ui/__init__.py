@@ -23,10 +23,35 @@ def add_metadata_from_bdgest(filename):
     logger.info(f"Processing {filename}")
 
     album_name = os.path.splitext(os.path.basename(filename))[0]
-    bdgest_meta, comicrack_meta = BdGestParse().parse_album_metadata_mobile(album_name)
 
+    # Extract archive cover first for disambiguation
     cover_archive_fp = archive_get_front_cover(filename)
-    cover_web_fp = get_bdgest_cover(bdgest_meta["cover_url"])
+
+    # Try disambiguation using cover similarity across top fuzzy candidates
+    parser = BdGestParse()
+    candidates = parser.search_album_candidates_fast(album_name, top_k=5)
+    chosen_url = None
+    best_sim = -1
+    best_cover_web_fp = None
+    for _, _, url in candidates:
+        try:
+            bd_meta_candidate, _ = parser.parse_album_metadata_mobile(album_name, album_url=url)
+            cover_web_fp_candidate = get_bdgest_cover(bd_meta_candidate["cover_url"])
+            sim = front_cover_similarity(cover_archive_fp, cover_web_fp_candidate)
+            if sim > best_sim:
+                best_sim = sim
+                chosen_url = url
+                best_cover_web_fp = cover_web_fp_candidate
+        except Exception:
+            continue
+
+    # If best similarity passes threshold, use that URL; else fallback to default fuzzy URL
+    if best_sim >= bdnex_conf['cover']['match_percentage'] and chosen_url:
+        bdgest_meta, comicrack_meta = parser.parse_album_metadata_mobile(album_name, album_url=chosen_url)
+        cover_web_fp = best_cover_web_fp
+    else:
+        bdgest_meta, comicrack_meta = parser.parse_album_metadata_mobile(album_name)
+        cover_web_fp = get_bdgest_cover(bdgest_meta["cover_url"])
 
     percentage_similarity = front_cover_similarity(cover_archive_fp, cover_web_fp)
 

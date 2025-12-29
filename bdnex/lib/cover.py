@@ -12,8 +12,14 @@ def get_bdgest_cover(cover_url):
     logger = logging.getLogger(__name__)
 
     cover_name = os.path.basename(cover_url)
-    os.path.join(os.environ["HOME"], '.local/share/bdnex/bedetheque/')
-    covers_local_path = os.path.join(os.environ["HOME"], '.local/share/bdnex/bedetheque/covers')
+    # Get home directory in a cross-platform way
+    home_dir = os.path.expanduser('~')
+    covers_local_path = os.path.join(home_dir, '.local/share/bdnex/bedetheque/covers')
+    
+    # Create directory if it doesn't exist
+    if not os.path.exists(covers_local_path):
+        os.makedirs(covers_local_path)
+    
     cover_local_path = os.path.join(covers_local_path, cover_name)
 
     if os.path.exists(cover_local_path):

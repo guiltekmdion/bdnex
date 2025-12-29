@@ -6,6 +6,7 @@ import tempfile
 import time
 import urllib
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from functools import lru_cache
 from os import listdir
 from os.path import isfile, join
@@ -115,25 +116,30 @@ class BdGestParse:
     def clean_sitemaps_urls(self):
         tempfile_path = self.concatenate_sitemaps_files()
 
-        with open(tempfile_path, 'r') as f:
-            myNames = [line.strip() for line in f]
+        try:
+            with open(tempfile_path, 'r', encoding='utf-8') as f:
+                myNames = [line.strip() for line in f]
 
-            # keep only mobile links
-            stringlist = [x for x in myNames if "m.bedetheque.com/BD-" in x]
+                # keep only mobile links
+                stringlist = [x for x in myNames if "m.bedetheque.com/BD-" in x]
 
-        # various string cleaning
-        urls_list = [re.search(r"(?P<url>https?://[^\s]+)", x).group("url").replace('"', '') for x in stringlist]
-        cleansed = [x.replace('https://m.bedetheque.com/BD-', '').replace('.html', '').replace('-', ' ')
-                    for x in urls_list]
+            # various string cleaning
+            urls_list = [re.search(r"(?P<url>https?://[^\s]+)", x).group("url").replace('"', '') for x in stringlist]
+            cleansed = [x.replace('https://m.bedetheque.com/BD-', '').replace('.html', '').replace('-', ' ')
+                        for x in urls_list]
 
-        cleansed = [ re.sub(r'\d+$', '', x) for x in cleansed ]  # remove ending numbers
-        # remove common french words. Will make levenshtein distance work better
-        album_list = []
-        for val in cleansed:
-            album_list.append(self.remove_common_words_from_string(val))
+            cleansed = [ re.sub(r'\d+$', '', x) for x in cleansed ]  # remove ending numbers
+            # remove common french words. Will make levenshtein distance work better
+            album_list = []
+            for val in cleansed:
+                album_list.append(self.remove_common_words_from_string(val))
 
-        os.remove(tempfile_path)
-        return album_list, urls_list
+            return album_list, urls_list
+        finally:
+            try:
+                os.remove(tempfile_path)
+            except (OSError, PermissionError):
+                pass  # Ignore if file can't be deleted on Windows
 
     @staticmethod
     def remove_common_words_from_string(string_to_clean):
@@ -182,6 +188,30 @@ class BdGestParse:
                 return url
         except Exception as err:
             self.logger.error("Fast search didn't provide any results")
+
+    def search_album_candidates_fast(self, album_name, top_k=5):
+        """
+        Return top_k candidate URLs from sitemaps using fuzzy matching.
+        Each candidate is a tuple: (name_string, score, url)
+        """
+        album_list, urls = self.clean_sitemaps_urls()
+        album_name_simplified = self.remove_common_words_from_string(album_name)
+
+        try:
+            album_name_first_word = re.match(r'\W*(\w[^,-_. !?"]*)', album_name_simplified).groups()[0]
+        except Exception:
+            album_name_first_word = album_name_simplified.split()[0] if album_name_simplified.split() else album_name
+
+        test_album = [x for id, x in enumerate(album_list) if album_name_first_word in x]
+        test_id = [id for id, x in enumerate(album_list) if album_name_first_word in x]
+
+        df = [[x, fuzz.ratio(album_name, x)] for x in test_album]
+        df = pd.DataFrame(df)
+        df["urls"] = [urls[x] for x in test_id]
+
+        df = df.sort_values([1], ascending=[False]).head(top_k)
+        candidates = [(row[0], row[1], row[2]) for row in df.values]
+        return candidates
 
     def search_album_from_sitemaps_interactive(self):
         # interactive fuzzy search for user prompt
@@ -438,7 +468,18 @@ class BdGestParse:
         comicrack_dict = {}
         for key in bdgest_mapping.keys():
             if key in metadata_dict.keys():
-                comicrack_dict[bdgest_mapping[key]] = metadata_dict[key]
+                value = metadata_dict[key]
+                # Round CommunityRating to 2 decimal places using Decimal for precision
+                if bdgest_mapping[key] == "CommunityRating" and isinstance(value, (int, float)):
+                    value = float(Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                comicrack_dict[bdgest_mapping[key]] = value
+
+        # Append ISBN to Notes if available (ComicInfo.xsd has no dedicated ISBN field)
+        isbn = metadata_dict.get('ISBN')
+        if isbn:
+            existing_notes = comicrack_dict.get('Notes', '')
+            notes = f"{existing_notes}\nISBN: {isbn}".strip()
+            comicrack_dict['Notes'] = notes
 
         try:
             published_date = dateutil.parser.parse(metadata_dict['Dépot_légal'])

@@ -105,8 +105,13 @@ def _init_config():
         bdnex_user_path = os.path.join(os.environ[UNIX_DIR_VAR],
                                        'bdnex')
     else:
-        bdnex_user_path = os.path.join(os.environ[UNIX_DIR_FALLBACK],
-                                       'bdnex')
+        # On Windows, use APPDATA or USERPROFILE
+        if os.name == 'nt':
+            config_base = os.environ.get('APPDATA', os.environ.get('USERPROFILE', os.path.expanduser('~')))
+        else:
+            config_base = os.path.expanduser(UNIX_DIR_FALLBACK)
+        bdnex_user_path = os.path.join(config_base, 'bdnex')
+    
     user_config_path = os.path.join(bdnex_user_path,
                                    'bdnex.yaml')
 

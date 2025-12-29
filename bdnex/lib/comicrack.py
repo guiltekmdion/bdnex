@@ -31,11 +31,23 @@ class comicInfo():
         tmpdir = tempfile.mkdtemp()
         comic_info_fp = os.path.join(tmpdir, 'ComicInfo.xml')
 
-        schema = xmlschema.XMLSchema(COMICINFO_TEMPLATE)
-
-        data = json.dumps(self.comic_info, default=str, sort_keys=True)
-        tmp_xml = xmlschema.from_json(data, preserve_root=True, schema=schema)
-        ET.ElementTree(tmp_xml).write(comic_info_fp, encoding='UTF-8', xml_declaration=True)
+        # Create XML directly to avoid JSON conversion issues with decimals
+        root = ET.Element("ComicInfo")
+        root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+        root.set("xmlns:xsd", "http://www.w3.org/2001/XMLSchema")
+        
+        for key, value in self.comic_info.items():
+            if value is not None and value != '':
+                elem = ET.SubElement(root, key)
+                # Format floats with 2 decimals max
+                if isinstance(value, float):
+                    elem.text = f"{value:.2f}"
+                else:
+                    elem.text = str(value)
+        
+        tree = ET.ElementTree(root)
+        ET.indent(tree, space="  ")
+        tree.write(comic_info_fp, encoding='UTF-8', xml_declaration=True)
 
         return comic_info_fp
 
