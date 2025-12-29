@@ -111,16 +111,32 @@ class SitemapCache:
     
     CACHE_VALIDITY_HOURS = 24  # Re-fetch sitemaps après 24h
     
-    def __init__(self, cache_dir: str):
+    def __init__(self, cache_dir: Optional[str] = None):
         """
         Initialize sitemap cache.
         
         Args:
-            cache_dir: Directory to store cached sitemaps
+            cache_dir: Directory to store cached sitemaps (auto-detected if None)
         """
+        if cache_dir is None:
+            # Auto-detect from bdnex config
+            try:
+                from bdnex.lib.utils import bdnex_config
+                bdnex_conf = bdnex_config()
+                share_path = os.path.expanduser(bdnex_conf['bdnex']['share_path'])
+                cache_dir = os.path.join(share_path, 'batch_results', 'cache')
+            except Exception:
+                # Fallback to temp directory
+                cache_dir = os.path.expanduser('~/.bdnex/cache')
+        
         self.cache_dir = cache_dir
         self.logger = logging.getLogger(__name__)
-        self.cache_file = os.path.join(cache_dir, 'sitemaps_cache.json')
+        
+        # Create cache directory if needed
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir, exist_ok=True)
+        
+        self.cache_file = os.path.join(self.cache_dir, 'sitemaps_cache.json')
     
     def get_cache(self) -> Optional[Dict[str, list]]:
         """
