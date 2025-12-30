@@ -50,6 +50,7 @@ jobs_lock = Lock()
 logs_lock = Lock()
 active_threads = 0
 threads_lock = Lock()
+job_counter_lock = Lock()
 
 # Storage for processed files and uncertain matches
 processed_files = set()
@@ -106,7 +107,10 @@ def process_comic_task(job_id, filepath, track_processed=True):
         logger.info(f"Job {job_id}: Starting processing of {filepath}")
         
         # Process the comic
-        # TODO: Capture match confidence to track uncertain matches
+        # Note: Currently, uncertain matches are detected based on exception messages
+        # since add_metadata_from_bdgest doesn't return confidence scores.
+        # A future improvement would be to modify add_metadata_from_bdgest to return
+        # match confidence and use that for more accurate uncertain match detection.
         try:
             add_metadata_from_bdgest(filepath)
             
@@ -244,11 +248,12 @@ def folder_watcher_task():
                     for filepath in unprocessed[:available_slots]:
                         logger.info(f"Auto-processing: {filepath}")
                         
-                        with jobs_lock:
+                        with job_counter_lock:
                             global job_counter
                             job_counter += 1
                             job_id = job_counter
-                            
+                        
+                        with jobs_lock:
                             jobs[job_id] = {
                                 'id': job_id,
                                 'type': 'auto-watch',
@@ -342,10 +347,11 @@ def api_process_file():
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
     
-    with jobs_lock:
+    with job_counter_lock:
         job_counter += 1
         job_id = job_counter
-        
+    
+    with jobs_lock:
         jobs[job_id] = {
             'id': job_id,
             'type': 'file',
@@ -381,10 +387,11 @@ def api_process_directory():
     if not os.path.exists(dirpath):
         return jsonify({'error': 'Directory not found'}), 404
     
-    with jobs_lock:
+    with job_counter_lock:
         job_counter += 1
         job_id = job_counter
-        
+    
+    with jobs_lock:
         jobs[job_id] = {
             'id': job_id,
             'type': 'directory',
@@ -411,10 +418,11 @@ def api_init():
         if active_threads >= MAX_CONCURRENT_JOBS:
             return jsonify({'error': 'Maximum concurrent jobs reached. Please wait.'}), 429
     
-    with jobs_lock:
+    with job_counter_lock:
         job_counter += 1
         job_id = job_counter
-        
+    
+    with jobs_lock:
         jobs[job_id] = {
             'id': job_id,
             'type': 'init',
@@ -537,11 +545,12 @@ def api_resolve_uncertain_match(index):
         # Retry processing this file
         filepath = match['filepath']
         
-        with jobs_lock:
+        with job_counter_lock:
             global job_counter
             job_counter += 1
             job_id = job_counter
-            
+        
+        with jobs_lock:
             jobs[job_id] = {
                 'id': job_id,
                 'type': 'retry-uncertain',
