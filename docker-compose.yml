@@ -13,6 +13,8 @@ services:
       - ./data/comics:/data/comics
       # Processed comics will be saved to ./data/output
       - ./data/output:/data/output
+      # Watch folder for automatic processing
+      - ./data/watch:/data/watch
       # Persistent cache for downloaded sitemaps and metadata
       - bdnex-cache:/root/.local/share/bdnex
       # Persistent configuration files
@@ -21,6 +23,10 @@ services:
       - FLASK_ENV=production
       # Unbuffered Python output for better logging
       - PYTHONUNBUFFERED=1
+      # Enable automatic folder watching (true/false)
+      - BDNEX_AUTO_WATCH=true
+      # Watcher interval in seconds (minimum 60)
+      - BDNEX_WATCH_INTERVAL=300
     restart: unless-stopped
 
 volumes:

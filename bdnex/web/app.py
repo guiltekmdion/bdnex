@@ -27,13 +27,17 @@ CORS(app)
 # Configuration - use environment variables with fallback to /data
 UPLOAD_FOLDER = os.environ.get('BDNEX_UPLOAD_FOLDER', '/data/comics')
 OUTPUT_FOLDER = os.environ.get('BDNEX_OUTPUT_FOLDER', '/data/output')
+WATCH_FOLDER = os.environ.get('BDNEX_WATCH_FOLDER', '/data/watch')
 MAX_LOG_LINES = 1000
 MAX_CONCURRENT_JOBS = 5
+AUTO_WATCH_ENABLED = os.environ.get('BDNEX_AUTO_WATCH', 'false').lower() == 'true'
+AUTO_WATCH_INTERVAL = int(os.environ.get('BDNEX_WATCH_INTERVAL', '300'))  # 5 minutes default
 
 # Ensure directories exist (only if they can be created)
 try:
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+    os.makedirs(WATCH_FOLDER, exist_ok=True)
 except (PermissionError, FileNotFoundError):
     # If we can't create directories (e.g., in testing), that's okay
     pass
@@ -46,6 +50,18 @@ jobs_lock = Lock()
 logs_lock = Lock()
 active_threads = 0
 threads_lock = Lock()
+
+# Storage for processed files and uncertain matches
+processed_files = set()
+uncertain_matches = []
+processed_files_lock = Lock()
+uncertain_matches_lock = Lock()
+
+# Watcher control
+watcher_enabled = AUTO_WATCH_ENABLED
+watcher_interval = AUTO_WATCH_INTERVAL
+watcher_thread = None
+watcher_lock = Lock()
 
 
 class LogHandler(logging.Handler):
@@ -74,7 +90,7 @@ root_logger.addHandler(log_handler)
 root_logger.setLevel(logging.INFO)
 
 
-def process_comic_task(job_id, filepath):
+def process_comic_task(job_id, filepath, track_processed=True):
     """Background task to process a comic file"""
     global active_threads
     
@@ -90,12 +106,32 @@ def process_comic_task(job_id, filepath):
         logger.info(f"Job {job_id}: Starting processing of {filepath}")
         
         # Process the comic
-        add_metadata_from_bdgest(filepath)
-        
-        with jobs_lock:
-            jobs[job_id]['status'] = 'completed'
-            jobs[job_id]['completed_at'] = datetime.now().isoformat()
-        logger.info(f"Job {job_id}: Completed successfully")
+        # TODO: Capture match confidence to track uncertain matches
+        try:
+            add_metadata_from_bdgest(filepath)
+            
+            # Mark as processed
+            if track_processed:
+                with processed_files_lock:
+                    processed_files.add(filepath)
+            
+            with jobs_lock:
+                jobs[job_id]['status'] = 'completed'
+                jobs[job_id]['completed_at'] = datetime.now().isoformat()
+            logger.info(f"Job {job_id}: Completed successfully")
+        except Exception as e:
+            # Check if it's a low confidence match (simplified detection)
+            error_msg = str(e)
+            if 'confidence' in error_msg.lower() or 'matching' in error_msg.lower():
+                with uncertain_matches_lock:
+                    uncertain_matches.append({
+                        'filepath': filepath,
+                        'timestamp': datetime.now().isoformat(),
+                        'error': error_msg,
+                        'job_id': job_id
+                    })
+                logger.warning(f"Job {job_id}: Uncertain match for {filepath}")
+            raise
         
     except Exception as e:
         with jobs_lock:
@@ -159,6 +195,86 @@ def process_directory_task(job_id, dirpath):
             active_threads -= 1
 
 
+def get_unprocessed_files(watch_dir):
+    """Find all comic files in watch directory that haven't been processed"""
+    unprocessed = []
+    
+    if not os.path.exists(watch_dir):
+        return unprocessed
+    
+    for ext in ['*.cbz', '*.cbr']:
+        for path in Path(watch_dir).rglob(ext):
+            filepath = path.absolute().as_posix()
+            with processed_files_lock:
+                if filepath not in processed_files:
+                    unprocessed.append(filepath)
+    
+    return unprocessed
+
+
+def folder_watcher_task():
+    """Background task that watches for new comics and processes them"""
+    global watcher_enabled, watcher_interval
+    
+    logger = logging.getLogger(__name__)
+    logger.info("Folder watcher started")
+    
+    while True:
+        try:
+            with watcher_lock:
+                if not watcher_enabled:
+                    logger.info("Folder watcher disabled, sleeping...")
+                    time.sleep(10)
+                    continue
+                
+                interval = watcher_interval
+            
+            # Find unprocessed files
+            unprocessed = get_unprocessed_files(WATCH_FOLDER)
+            
+            if unprocessed:
+                logger.info(f"Found {len(unprocessed)} unprocessed files in watch folder")
+                
+                # Check if we can process more jobs
+                with threads_lock:
+                    available_slots = MAX_CONCURRENT_JOBS - active_threads
+                
+                if available_slots > 0:
+                    # Process up to available slots
+                    for filepath in unprocessed[:available_slots]:
+                        logger.info(f"Auto-processing: {filepath}")
+                        
+                        with jobs_lock:
+                            global job_counter
+                            job_counter += 1
+                            job_id = job_counter
+                            
+                            jobs[job_id] = {
+                                'id': job_id,
+                                'type': 'auto-watch',
+                                'filepath': filepath,
+                                'status': 'queued',
+                                'created_at': datetime.now().isoformat()
+                            }
+                        
+                        # Start processing
+                        thread = threading.Thread(
+                            target=process_comic_task, 
+                            args=(job_id, filepath, True)
+                        )
+                        thread.daemon = True
+                        thread.start()
+                else:
+                    logger.debug("No available job slots, waiting...")
+            
+            # Sleep for the configured interval
+            time.sleep(interval)
+            
+        except Exception as e:
+            logger.error(f"Folder watcher error: {str(e)}")
+            time.sleep(60)  # Sleep for a minute on error
+
+
 @app.route('/')
 def index():
     """Main page"""
@@ -168,11 +284,26 @@ def index():
 @app.route('/api/status')
 def api_status():
     """Get application status"""
+    with watcher_lock:
+        watcher_status = {
+            'enabled': watcher_enabled,
+            'interval': watcher_interval
+        }
+    
+    with uncertain_matches_lock:
+        uncertain_count = len(uncertain_matches)
+    
+    with processed_files_lock:
+        processed_count = len(processed_files)
+    
     return jsonify({
         'status': 'running',
         'version': '0.1',
         'jobs': len(jobs),
-        'active_jobs': sum(1 for j in jobs.values() if j['status'] == 'processing')
+        'active_jobs': sum(1 for j in jobs.values() if j['status'] == 'processing'),
+        'watcher': watcher_status,
+        'uncertain_matches': uncertain_count,
+        'processed_files': processed_count
     })
 
 
@@ -328,6 +459,114 @@ def api_init():
     return jsonify({'job_id': job_id, 'status': 'queued'}), 202
 
 
+@app.route('/api/watcher/status', methods=['GET'])
+def api_watcher_status():
+    """Get folder watcher status"""
+    with watcher_lock:
+        status = {
+            'enabled': watcher_enabled,
+            'interval': watcher_interval,
+            'watch_folder': WATCH_FOLDER
+        }
+    
+    unprocessed = get_unprocessed_files(WATCH_FOLDER)
+    status['unprocessed_count'] = len(unprocessed)
+    
+    return jsonify(status)
+
+
+@app.route('/api/watcher/enable', methods=['POST'])
+def api_watcher_enable():
+    """Enable folder watcher"""
+    global watcher_enabled, watcher_interval
+    
+    data = request.json or {}
+    new_interval = data.get('interval', watcher_interval)
+    
+    try:
+        new_interval = int(new_interval)
+        if new_interval < 60:
+            return jsonify({'error': 'Interval must be at least 60 seconds'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid interval value'}), 400
+    
+    with watcher_lock:
+        watcher_enabled = True
+        watcher_interval = new_interval
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Folder watcher enabled with interval {new_interval}s")
+    
+    return jsonify({'status': 'enabled', 'interval': new_interval})
+
+
+@app.route('/api/watcher/disable', methods=['POST'])
+def api_watcher_disable():
+    """Disable folder watcher"""
+    global watcher_enabled
+    
+    with watcher_lock:
+        watcher_enabled = False
+    
+    logger = logging.getLogger(__name__)
+    logger.info("Folder watcher disabled")
+    
+    return jsonify({'status': 'disabled'})
+
+
+@app.route('/api/uncertain-matches', methods=['GET'])
+def api_uncertain_matches():
+    """Get list of uncertain matches"""
+    with uncertain_matches_lock:
+        return jsonify(uncertain_matches)
+
+
+@app.route('/api/uncertain-matches/<int:index>/resolve', methods=['POST'])
+def api_resolve_uncertain_match(index):
+    """Mark an uncertain match as resolved or retry processing"""
+    data = request.json or {}
+    action = data.get('action', 'retry')  # retry or dismiss
+    
+    with uncertain_matches_lock:
+        if index < 0 or index >= len(uncertain_matches):
+            return jsonify({'error': 'Invalid match index'}), 404
+        
+        match = uncertain_matches[index]
+    
+    if action == 'retry':
+        # Retry processing this file
+        filepath = match['filepath']
+        
+        with jobs_lock:
+            global job_counter
+            job_counter += 1
+            job_id = job_counter
+            
+            jobs[job_id] = {
+                'id': job_id,
+                'type': 'retry-uncertain',
+                'filepath': filepath,
+                'status': 'queued',
+                'created_at': datetime.now().isoformat()
+            }
+        
+        thread = threading.Thread(target=process_comic_task, args=(job_id, filepath, False))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({'status': 'retrying', 'job_id': job_id})
+    
+    elif action == 'dismiss':
+        # Remove from uncertain matches list
+        with uncertain_matches_lock:
+            uncertain_matches.pop(index)
+        
+        return jsonify({'status': 'dismissed'})
+    
+    else:
+        return jsonify({'error': 'Invalid action'}), 400
+
+
 @app.route('/api/logs', methods=['GET'])
 def api_logs():
     """Get application logs"""
@@ -378,7 +617,24 @@ def health():
     return jsonify({'status': 'healthy'}), 200
 
 
+def start_watcher():
+    """Start the folder watcher thread"""
+    global watcher_thread
+    
+    if watcher_thread is None or not watcher_thread.is_alive():
+        watcher_thread = threading.Thread(target=folder_watcher_task)
+        watcher_thread.daemon = True
+        watcher_thread.start()
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f"Folder watcher thread started (enabled: {watcher_enabled})")
+
+
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logger.info("Starting BDneX Web Interface")
+    
+    # Start the folder watcher thread
+    start_watcher()
+    
     app.run(host='0.0.0.0', port=5000, debug=False)

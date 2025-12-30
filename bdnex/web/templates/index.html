@@ -354,6 +354,27 @@
                     <label>Initialize/Update Sitemaps</label>
                     <button class="btn btn-secondary" onclick="initSitemaps()">Download Sitemaps</button>
                 </div>
+
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;">
+
+                <div class="form-group">
+                    <label>🔍 Folder Watcher</label>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+                        Automatically monitors <strong id="watch-folder">/data/watch</strong> for new comics
+                    </p>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <button class="btn" onclick="enableWatcher()" id="enable-watcher-btn">Enable Watcher</button>
+                        <button class="btn btn-secondary" onclick="disableWatcher()" id="disable-watcher-btn">Disable Watcher</button>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <label style="flex: 0 0 auto; margin: 0;">Interval (seconds):</label>
+                        <input type="number" id="watcher-interval" value="300" min="60" style="width: 120px; padding: 8px;">
+                        <span id="watcher-status" style="font-weight: 600; color: #999;">Disabled</span>
+                    </div>
+                    <p style="font-size: 12px; color: #999; margin-top: 5px;">
+                        Unprocessed files: <strong id="unprocessed-count">0</strong>
+                    </p>
+                </div>
             </div>
 
             <div class="card">
@@ -361,6 +382,16 @@
                 <div class="jobs-list" id="jobs-list">
                     <p style="text-align: center; color: #999;">No jobs yet. Start processing to see jobs here.</p>
                 </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>⚠️ Uncertain Matches</h2>
+            <p style="color: #666; margin-bottom: 15px; font-size: 14px;">
+                Comics with low confidence matches that may need manual review
+            </p>
+            <div id="uncertain-matches-list" class="jobs-list">
+                <p style="text-align: center; color: #999;">No uncertain matches. All comics processed with good confidence.</p>
             </div>
         </div>
 
@@ -474,6 +505,136 @@
             }
         }
 
+        // Enable folder watcher
+        async function enableWatcher() {
+            const interval = document.getElementById('watcher-interval').value;
+            
+            try {
+                const response = await fetch('/api/watcher/enable', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ interval: parseInt(interval) })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage(`Folder watcher enabled (checking every ${data.interval}s)`, 'success');
+                    updateWatcherStatus();
+                } else {
+                    showMessage(data.error || 'Failed to enable watcher', 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Disable folder watcher
+        async function disableWatcher() {
+            try {
+                const response = await fetch('/api/watcher/disable', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showMessage('Folder watcher disabled', 'success');
+                    updateWatcherStatus();
+                } else {
+                    showMessage(data.error || 'Failed to disable watcher', 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Update watcher status display
+        async function updateWatcherStatus() {
+            try {
+                const response = await fetch('/api/watcher/status');
+                const data = await response.json();
+                
+                const statusEl = document.getElementById('watcher-status');
+                const watchFolderEl = document.getElementById('watch-folder');
+                const unprocessedEl = document.getElementById('unprocessed-count');
+                
+                if (data.enabled) {
+                    statusEl.textContent = `Enabled (${data.interval}s)`;
+                    statusEl.style.color = '#388e3c';
+                } else {
+                    statusEl.textContent = 'Disabled';
+                    statusEl.style.color = '#999';
+                }
+                
+                watchFolderEl.textContent = data.watch_folder;
+                unprocessedEl.textContent = data.unprocessed_count || 0;
+                
+                document.getElementById('watcher-interval').value = data.interval;
+            } catch (error) {
+                console.error('Error updating watcher status:', error);
+            }
+        }
+
+        // Load uncertain matches
+        async function loadUncertainMatches() {
+            try {
+                const response = await fetch('/api/uncertain-matches');
+                const matches = await response.json();
+                
+                const container = document.getElementById('uncertain-matches-list');
+                if (matches.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #999;">No uncertain matches. All comics processed with good confidence.</p>';
+                    return;
+                }
+                
+                container.innerHTML = matches.map((match, index) => `
+                    <div class="job-item" style="border-left-color: #f57c00;">
+                        <div class="job-item-header">
+                            <span class="job-item-id">⚠️ Uncertain Match</span>
+                            <span class="status-badge status-queued">Review Needed</span>
+                        </div>
+                        <div class="job-item-details">
+                            <strong>File:</strong> ${escapeHtml(match.filepath)}<br>
+                            <strong>Time:</strong> ${new Date(match.timestamp).toLocaleString()}<br>
+                            <strong>Issue:</strong> ${escapeHtml(match.error)}<br>
+                            <div style="margin-top: 10px; display: flex; gap: 10px;">
+                                <button class="btn" onclick="resolveUncertain(${index}, 'retry')" style="padding: 6px 12px; font-size: 14px;">Retry</button>
+                                <button class="btn btn-secondary" onclick="resolveUncertain(${index}, 'dismiss')" style="padding: 6px 12px; font-size: 14px;">Dismiss</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Error loading uncertain matches:', error);
+            }
+        }
+
+        // Resolve uncertain match
+        async function resolveUncertain(index, action) {
+            try {
+                const response = await fetch(`/api/uncertain-matches/${index}/resolve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    if (action === 'retry') {
+                        showMessage(`Retrying processing (Job ${data.job_id})`, 'success');
+                    } else {
+                        showMessage('Match dismissed', 'success');
+                    }
+                    loadUncertainMatches();
+                } else {
+                    showMessage(data.error || 'Failed to resolve match', 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            }
+        }
+
         // Filter logs
         function filterLogs(level, event) {
             currentLogFilter = level;
@@ -576,10 +737,14 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadLogs();
             loadJobs();
+            updateWatcherStatus();
+            loadUncertainMatches();
             
             // Refresh logs and jobs periodically
             setInterval(loadLogs, 3000);
             setInterval(loadJobs, 2000);
+            setInterval(updateWatcherStatus, 5000);
+            setInterval(loadUncertainMatches, 10000);
         });
     </script>
 </body>
