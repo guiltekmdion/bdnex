@@ -367,11 +367,11 @@
         <div class="card">
             <h2>📜 Logs</h2>
             <div class="filter-buttons">
-                <button class="filter-btn active" onclick="filterLogs('ALL')">All</button>
-                <button class="filter-btn" onclick="filterLogs('INFO')">Info</button>
-                <button class="filter-btn" onclick="filterLogs('WARNING')">Warning</button>
-                <button class="filter-btn" onclick="filterLogs('ERROR')">Error</button>
-                <button class="filter-btn" onclick="filterLogs('DEBUG')">Debug</button>
+                <button class="filter-btn active" onclick="filterLogs('ALL', event)">All</button>
+                <button class="filter-btn" onclick="filterLogs('INFO', event)">Info</button>
+                <button class="filter-btn" onclick="filterLogs('WARNING', event)">Warning</button>
+                <button class="filter-btn" onclick="filterLogs('ERROR', event)">Error</button>
+                <button class="filter-btn" onclick="filterLogs('DEBUG', event)">Debug</button>
             </div>
             <div class="log-viewer" id="log-viewer">
                 <div style="text-align: center; color: #858585;">Waiting for logs...</div>
@@ -471,7 +471,7 @@
         }
 
         // Filter logs
-        function filterLogs(level) {
+        function filterLogs(level, event) {
             currentLogFilter = level;
             
             // Update button states

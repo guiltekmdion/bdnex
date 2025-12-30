@@ -10,11 +10,13 @@ import os
 import logging
 import threading
 import time
+import json
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
 from collections import deque
+from threading import Lock
 
 from bdnex.ui import add_metadata_from_bdgest
 from bdnex.lib.bdgest import BdGestParse
@@ -27,6 +29,7 @@ CORS(app)
 UPLOAD_FOLDER = os.environ.get('BDNEX_UPLOAD_FOLDER', '/data/comics')
 OUTPUT_FOLDER = os.environ.get('BDNEX_OUTPUT_FOLDER', '/data/output')
 MAX_LOG_LINES = 1000
+MAX_CONCURRENT_JOBS = 5
 
 # Ensure directories exist (only if they can be created)
 try:
@@ -36,10 +39,14 @@ except (PermissionError, FileNotFoundError):
     # If we can't create directories (e.g., in testing), that's okay
     pass
 
-# Global storage for jobs and logs
+# Global storage for jobs and logs with thread safety
 jobs = {}
 log_buffer = deque(maxlen=MAX_LOG_LINES)
 job_counter = 0
+jobs_lock = Lock()
+logs_lock = Lock()
+active_threads = 0
+threads_lock = Lock()
 
 
 class LogHandler(logging.Handler):
@@ -52,7 +59,8 @@ class LogHandler(logging.Handler):
             'message': self.format(record),
             'logger': record.name
         }
-        log_buffer.append(log_entry)
+        with logs_lock:
+            log_buffer.append(log_entry)
 
 
 # Setup logging
@@ -69,11 +77,15 @@ root_logger.setLevel(logging.INFO)
 
 def process_comic_task(job_id, filepath):
     """Background task to process a comic file"""
-    global jobs
+    global active_threads
     
     try:
-        jobs[job_id]['status'] = 'processing'
-        jobs[job_id]['started_at'] = datetime.now().isoformat()
+        with threads_lock:
+            active_threads += 1
+        
+        with jobs_lock:
+            jobs[job_id]['status'] = 'processing'
+            jobs[job_id]['started_at'] = datetime.now().isoformat()
         
         logger = logging.getLogger(__name__)
         logger.info(f"Job {job_id}: Starting processing of {filepath}")
@@ -81,24 +93,33 @@ def process_comic_task(job_id, filepath):
         # Process the comic
         add_metadata_from_bdgest(filepath)
         
-        jobs[job_id]['status'] = 'completed'
-        jobs[job_id]['completed_at'] = datetime.now().isoformat()
+        with jobs_lock:
+            jobs[job_id]['status'] = 'completed'
+            jobs[job_id]['completed_at'] = datetime.now().isoformat()
         logger.info(f"Job {job_id}: Completed successfully")
         
     except Exception as e:
-        jobs[job_id]['status'] = 'failed'
-        jobs[job_id]['error'] = str(e)
-        jobs[job_id]['completed_at'] = datetime.now().isoformat()
+        with jobs_lock:
+            jobs[job_id]['status'] = 'failed'
+            jobs[job_id]['error'] = str(e)
+            jobs[job_id]['completed_at'] = datetime.now().isoformat()
         logger.error(f"Job {job_id}: Failed with error: {str(e)}")
+    finally:
+        with threads_lock:
+            active_threads -= 1
 
 
 def process_directory_task(job_id, dirpath):
     """Background task to process a directory of comics"""
-    global jobs
+    global active_threads
     
     try:
-        jobs[job_id]['status'] = 'processing'
-        jobs[job_id]['started_at'] = datetime.now().isoformat()
+        with threads_lock:
+            active_threads += 1
+            
+        with jobs_lock:
+            jobs[job_id]['status'] = 'processing'
+            jobs[job_id]['started_at'] = datetime.now().isoformat()
         
         logger = logging.getLogger(__name__)
         logger.info(f"Job {job_id}: Starting directory processing of {dirpath}")
@@ -109,27 +130,34 @@ def process_directory_task(job_id, dirpath):
             for path in Path(dirpath).rglob(ext):
                 files.append(path.absolute().as_posix())
         
-        jobs[job_id]['total_files'] = len(files)
-        jobs[job_id]['processed_files'] = 0
+        with jobs_lock:
+            jobs[job_id]['total_files'] = len(files)
+            jobs[job_id]['processed_files'] = 0
         
         # Process each file
         for file in files:
             try:
                 logger.info(f"Job {job_id}: Processing file {file}")
                 add_metadata_from_bdgest(file)
-                jobs[job_id]['processed_files'] += 1
+                with jobs_lock:
+                    jobs[job_id]['processed_files'] += 1
             except Exception as e:
                 logger.error(f"Job {job_id}: Failed to process {file}: {str(e)}")
         
-        jobs[job_id]['status'] = 'completed'
-        jobs[job_id]['completed_at'] = datetime.now().isoformat()
+        with jobs_lock:
+            jobs[job_id]['status'] = 'completed'
+            jobs[job_id]['completed_at'] = datetime.now().isoformat()
         logger.info(f"Job {job_id}: Completed directory processing")
         
     except Exception as e:
-        jobs[job_id]['status'] = 'failed'
-        jobs[job_id]['error'] = str(e)
-        jobs[job_id]['completed_at'] = datetime.now().isoformat()
+        with jobs_lock:
+            jobs[job_id]['status'] = 'failed'
+            jobs[job_id]['error'] = str(e)
+            jobs[job_id]['completed_at'] = datetime.now().isoformat()
         logger.error(f"Job {job_id}: Directory processing failed: {str(e)}")
+    finally:
+        with threads_lock:
+            active_threads -= 1
 
 
 @app.route('/')
@@ -152,21 +180,28 @@ def api_status():
 @app.route('/api/jobs', methods=['GET'])
 def api_jobs():
     """Get list of all jobs"""
-    return jsonify(list(jobs.values()))
+    with jobs_lock:
+        return jsonify(list(jobs.values()))
 
 
 @app.route('/api/jobs/<int:job_id>', methods=['GET'])
 def api_job_detail(job_id):
     """Get details of a specific job"""
-    if job_id not in jobs:
-        return jsonify({'error': 'Job not found'}), 404
-    return jsonify(jobs[job_id])
+    with jobs_lock:
+        if job_id not in jobs:
+            return jsonify({'error': 'Job not found'}), 404
+        return jsonify(jobs[job_id])
 
 
 @app.route('/api/process/file', methods=['POST'])
 def api_process_file():
     """Process a single comic file"""
-    global job_counter, jobs
+    global job_counter, active_threads
+    
+    # Check if we've reached max concurrent jobs
+    with threads_lock:
+        if active_threads >= MAX_CONCURRENT_JOBS:
+            return jsonify({'error': 'Maximum concurrent jobs reached. Please wait.'}), 429
     
     data = request.json
     filepath = data.get('filepath')
@@ -177,16 +212,17 @@ def api_process_file():
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
     
-    job_counter += 1
-    job_id = job_counter
-    
-    jobs[job_id] = {
-        'id': job_id,
-        'type': 'file',
-        'filepath': filepath,
-        'status': 'queued',
-        'created_at': datetime.now().isoformat()
-    }
+    with jobs_lock:
+        job_counter += 1
+        job_id = job_counter
+        
+        jobs[job_id] = {
+            'id': job_id,
+            'type': 'file',
+            'filepath': filepath,
+            'status': 'queued',
+            'created_at': datetime.now().isoformat()
+        }
     
     # Start background task
     thread = threading.Thread(target=process_comic_task, args=(job_id, filepath))
@@ -199,7 +235,12 @@ def api_process_file():
 @app.route('/api/process/directory', methods=['POST'])
 def api_process_directory():
     """Process all comics in a directory"""
-    global job_counter, jobs
+    global job_counter, active_threads
+    
+    # Check if we've reached max concurrent jobs
+    with threads_lock:
+        if active_threads >= MAX_CONCURRENT_JOBS:
+            return jsonify({'error': 'Maximum concurrent jobs reached. Please wait.'}), 429
     
     data = request.json
     dirpath = data.get('dirpath')
@@ -210,16 +251,17 @@ def api_process_directory():
     if not os.path.exists(dirpath):
         return jsonify({'error': 'Directory not found'}), 404
     
-    job_counter += 1
-    job_id = job_counter
-    
-    jobs[job_id] = {
-        'id': job_id,
-        'type': 'directory',
-        'dirpath': dirpath,
-        'status': 'queued',
-        'created_at': datetime.now().isoformat()
-    }
+    with jobs_lock:
+        job_counter += 1
+        job_id = job_counter
+        
+        jobs[job_id] = {
+            'id': job_id,
+            'type': 'directory',
+            'dirpath': dirpath,
+            'status': 'queued',
+            'created_at': datetime.now().isoformat()
+        }
     
     # Start background task
     thread = threading.Thread(target=process_directory_task, args=(job_id, dirpath))
@@ -232,37 +274,53 @@ def api_process_directory():
 @app.route('/api/init', methods=['POST'])
 def api_init():
     """Initialize/update bedetheque sitemaps"""
-    global job_counter, jobs
+    global job_counter, active_threads
     
-    job_counter += 1
-    job_id = job_counter
+    # Check if we've reached max concurrent jobs
+    with threads_lock:
+        if active_threads >= MAX_CONCURRENT_JOBS:
+            return jsonify({'error': 'Maximum concurrent jobs reached. Please wait.'}), 429
     
-    jobs[job_id] = {
-        'id': job_id,
-        'type': 'init',
-        'status': 'queued',
-        'created_at': datetime.now().isoformat()
-    }
+    with jobs_lock:
+        job_counter += 1
+        job_id = job_counter
+        
+        jobs[job_id] = {
+            'id': job_id,
+            'type': 'init',
+            'status': 'queued',
+            'created_at': datetime.now().isoformat()
+        }
     
     def init_task(job_id):
+        global active_threads
         try:
-            jobs[job_id]['status'] = 'processing'
-            jobs[job_id]['started_at'] = datetime.now().isoformat()
+            with threads_lock:
+                active_threads += 1
+                
+            with jobs_lock:
+                jobs[job_id]['status'] = 'processing'
+                jobs[job_id]['started_at'] = datetime.now().isoformat()
             
             logger = logging.getLogger(__name__)
             logger.info(f"Job {job_id}: Starting sitemap download")
             
             BdGestParse().download_sitemaps()
             
-            jobs[job_id]['status'] = 'completed'
-            jobs[job_id]['completed_at'] = datetime.now().isoformat()
+            with jobs_lock:
+                jobs[job_id]['status'] = 'completed'
+                jobs[job_id]['completed_at'] = datetime.now().isoformat()
             logger.info(f"Job {job_id}: Sitemap download completed")
             
         except Exception as e:
-            jobs[job_id]['status'] = 'failed'
-            jobs[job_id]['error'] = str(e)
-            jobs[job_id]['completed_at'] = datetime.now().isoformat()
+            with jobs_lock:
+                jobs[job_id]['status'] = 'failed'
+                jobs[job_id]['error'] = str(e)
+                jobs[job_id]['completed_at'] = datetime.now().isoformat()
             logger.error(f"Job {job_id}: Sitemap download failed: {str(e)}")
+        finally:
+            with threads_lock:
+                active_threads -= 1
     
     thread = threading.Thread(target=init_task, args=(job_id,))
     thread.daemon = True
@@ -275,9 +333,15 @@ def api_init():
 def api_logs():
     """Get application logs"""
     level = request.args.get('level', None)
-    limit = int(request.args.get('limit', 100))
+    try:
+        limit = int(request.args.get('limit', 100))
+        # Cap the limit to prevent memory issues
+        limit = min(limit, 1000)
+    except (ValueError, TypeError):
+        limit = 100
     
-    logs = list(log_buffer)
+    with logs_lock:
+        logs = list(log_buffer)
     
     if level:
         logs = [log for log in logs if log['level'] == level.upper()]
@@ -293,15 +357,17 @@ def api_logs():
 def api_logs_stream():
     """Stream logs in real-time (SSE)"""
     def generate():
-        last_seen = len(log_buffer)
+        with logs_lock:
+            last_seen = len(log_buffer)
         while True:
-            current_size = len(log_buffer)
-            if current_size > last_seen:
-                # New logs available
-                new_logs = list(log_buffer)[last_seen:]
-                for log in new_logs:
-                    yield f"data: {jsonify(log).get_data(as_text=True)}\n\n"
-                last_seen = current_size
+            with logs_lock:
+                current_size = len(log_buffer)
+                if current_size > last_seen:
+                    # New logs available
+                    new_logs = list(log_buffer)[last_seen:]
+                    for log in new_logs:
+                        yield f"data: {json.dumps(log)}\n\n"
+                    last_seen = current_size
             time.sleep(1)
     
     return app.response_class(generate(), mimetype='text/event-stream')

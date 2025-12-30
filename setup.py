@@ -49,6 +49,8 @@ setup(
         'argparse',
         'beautifulsoup4',
         'duckduckgo-search',
+        'flask',
+        'flask-cors',
         'html5lib',  # bs4 dependency
         'imutils',
         'lxml',  # bs4 dependency

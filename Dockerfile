@@ -15,9 +15,9 @@ WORKDIR /app
 # Copy application files
 COPY . /app/
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -e .
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org flask flask-cors
+# Install Python dependencies (combined to reduce layers)
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -e . && \
+    pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org flask flask-cors
 
 # Create directories for data
 RUN mkdir -p /data/comics /data/output /root/.local/share/bdnex /root/.config/bdnex
