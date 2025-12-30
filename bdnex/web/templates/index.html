@@ -393,7 +393,11 @@
 
             setTimeout(() => {
                 div.classList.remove('show');
-                setTimeout(() => container.removeChild(div), 300);
+                setTimeout(() => {
+                    if (div.parentNode) {
+                        container.removeChild(div);
+                    }
+                }, 300);
             }, 5000);
         }
 

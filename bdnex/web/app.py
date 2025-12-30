@@ -13,14 +13,13 @@ import time
 import json
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from collections import deque
 from threading import Lock
 
 from bdnex.ui import add_metadata_from_bdgest
 from bdnex.lib.bdgest import BdGestParse
-from bdnex.lib.utils import bdnex_config
 
 app = Flask(__name__)
 CORS(app)
