@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  bdnex:
+    build: .
+    container_name: bdnex-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/comics:/data/comics
+      - ./data/output:/data/output
+      - bdnex-cache:/root/.local/share/bdnex
+      - bdnex-config:/root/.config/bdnex
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  bdnex-cache:
+  bdnex-config:
