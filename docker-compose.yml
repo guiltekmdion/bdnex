@@ -5,17 +5,25 @@ services:
     build: .
     container_name: bdnex-app
     ports:
+      # Web interface will be available at http://localhost:5000
       - "5000:5000"
     volumes:
+      # Mount local directories for comics and output
+      # Comics to process should be placed in ./data/comics
       - ./data/comics:/data/comics
+      # Processed comics will be saved to ./data/output
       - ./data/output:/data/output
+      # Persistent cache for downloaded sitemaps and metadata
       - bdnex-cache:/root/.local/share/bdnex
+      # Persistent configuration files
       - bdnex-config:/root/.config/bdnex
     environment:
       - FLASK_ENV=production
+      # Unbuffered Python output for better logging
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
 
 volumes:
+  # Named volumes for persistent data
   bdnex-cache:
   bdnex-config:
