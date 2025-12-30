@@ -151,14 +151,34 @@ Si vous exécutez BDneX avec Docker, accédez à l'interface web sur `http://loc
 1. **Initialiser les Sitemaps** : Cliquez sur "Download Sitemaps" pour initialiser la base de données
 2. **Traiter un fichier unique** : Entrez le chemin d'un fichier BD (ex: `/data/comics/comic.cbz`)
 3. **Traiter un répertoire** : Entrez un chemin de répertoire pour traiter toutes les BD qu'il contient
-4. **Surveiller les tâches** : Visualisez l'état et la progression des tâches en temps réel
-5. **Voir les logs** : Consultez les logs de l'application avec filtrage par niveau (INFO, WARNING, ERROR, DEBUG)
+4. **Activer la surveillance de dossier** : Traitement automatique des nouvelles BD dans le dossier surveillé
+5. **Surveiller les tâches** : Visualisez l'état et la progression des tâches en temps réel
+6. **Examiner les correspondances incertaines** : Vérifiez les BD nécessitant une validation manuelle
+7. **Voir les logs** : Consultez les logs de l'application avec filtrage par niveau (INFO, WARNING, ERROR, DEBUG)
 
 L'interface web fournit :
 - 📊 Surveillance des tâches et statistiques en temps réel
 - 📜 Diffusion des logs en direct avec filtrage
 - 📂 Traitement facile de fichiers et répertoires
 - 🔄 Initialisation et mises à jour des sitemaps
+- 🔍 **Surveillance automatique de dossier avec traitement planifié**
+- ⚠️ **Suivi des correspondances incertaines pour révision manuelle**
+
+### Traitement automatique (Surveillance de dossier)
+
+BDneX peut surveiller automatiquement un dossier et traiter les nouvelles BD :
+
+1. Placez les BD dans le dossier surveillé : `./data/watch`
+2. Activez la surveillance dans l'interface web ou via variable d'environnement :
+   - Définissez `BDNEX_AUTO_WATCH=true` dans `.env` ou `docker-compose.yml`
+   - Configurez l'intervalle de scan (par défaut : 300 secondes)
+3. BDneX détectera et traitera automatiquement les nouveaux fichiers
+
+La surveillance :
+- Fonctionne en continu en arrière-plan
+- Respecte les limites de tâches simultanées
+- Suit les fichiers traités pour éviter le retraitement
+- Peut être activée/désactivée dynamiquement
 
 ### Utiliser la ligne de commande
 
@@ -336,12 +356,39 @@ docker-compose exec bdnex /bin/bash
 La configuration Docker utilise les volumes suivants :
 - `./data/comics` : Répertoire d'entrée pour les fichiers BD
 - `./data/output` : Répertoire de sortie pour les fichiers traités
+- `./data/watch` : **Répertoire surveillé pour le traitement automatique**
 - `bdnex-cache` : Cache persistant pour les sitemaps et métadonnées téléchargés
 - `bdnex-config` : Fichiers de configuration persistants
 
 ### Fonctionnalités de l'interface web
 
 L'interface web (disponible sur `http://localhost:5000`) fournit :
+
+1. **Gestion des processus**
+   - Traiter des fichiers BD individuels
+   - Traiter des répertoires entiers de manière récursive
+   - Initialiser/mettre à jour les sitemaps de bedetheque.com
+
+2. **Traitement automatique (NOUVEAU)**
+   - Surveillance de dossier pour monitoring continu
+   - Intervalles de scan configurables (minimum 60 secondes)
+   - Détection automatique des nouvelles BD
+   - Traitement en arrière-plan sans intervention manuelle
+
+3. **Surveillance des tâches**
+   - Suivi de l'état des tâches en temps réel
+   - Indicateurs de progression pour les opérations par lots
+   - Historique des tâches avec horodatages
+   - Suivi séparé des tâches auto-surveillées
+
+4. **Correspondances incertaines (NOUVEAU)**
+   - Examiner les BD avec des correspondances à faible confiance
+   - Options de réessai ou de rejet manuel
+   - Empêche l'application incorrecte de métadonnées
+   - Onglet dédié pour un accès facile
+
+5. **Visionneuse de logs**
+   - Diffusion des logs en direct
 
 1. **Gestion des processus**
    - Traiter des fichiers BD individuels

@@ -154,14 +154,34 @@ If you're running BDneX with Docker, access the web interface at `http://localho
 1. **Initialize Sitemaps**: Click "Download Sitemaps" to initialize the database
 2. **Process Single File**: Enter the path to a comic file (e.g., `/data/comics/comic.cbz`)
 3. **Process Directory**: Enter a directory path to process all comics in it
-4. **Monitor Jobs**: View job status and progress in real-time
-5. **View Logs**: Check application logs with filtering by level (INFO, WARNING, ERROR, DEBUG)
+4. **Enable Folder Watcher**: Automatically process new comics in the watch folder
+5. **Monitor Jobs**: View job status and progress in real-time
+6. **Review Uncertain Matches**: Check comics that need manual verification
+7. **View Logs**: Check application logs with filtering by level (INFO, WARNING, ERROR, DEBUG)
 
 The web interface provides:
 - 📊 Real-time job monitoring and statistics
 - 📜 Live log streaming with filtering
 - 📂 Easy file and directory processing
 - 🔄 Sitemap initialization and updates
+- 🔍 **Automatic folder watching with scheduled processing**
+- ⚠️ **Uncertain matches tracking for manual review**
+
+### Automatic Processing (Folder Watcher)
+
+BDneX can automatically monitor a folder and process new comics:
+
+1. Place comics in the watch folder: `./data/watch`
+2. Enable the watcher in the web interface or via environment variable:
+   - Set `BDNEX_AUTO_WATCH=true` in `.env` or `docker-compose.yml`
+   - Configure scan interval (default: 300 seconds)
+3. BDneX will automatically detect and process new files
+
+The watcher:
+- Runs continuously in the background
+- Respects concurrent job limits
+- Tracks processed files to avoid reprocessing
+- Can be enabled/disabled dynamically
 
 ### Using the Command Line
 
@@ -339,6 +359,7 @@ docker-compose exec bdnex /bin/bash
 The Docker setup uses the following volumes:
 - `./data/comics`: Input directory for comic files
 - `./data/output`: Output directory for processed files
+- `./data/watch`: **Watch directory for automatic processing**
 - `bdnex-cache`: Persistent cache for downloaded sitemaps and metadata
 - `bdnex-config`: Persistent configuration files
 
@@ -351,12 +372,25 @@ The web interface (available at `http://localhost:5000`) provides:
    - Process entire directories recursively
    - Initialize/update bedetheque.com sitemaps
 
-2. **Job Monitoring**
+2. **Automatic Processing (NEW)**
+   - Folder watcher for continuous monitoring
+   - Configurable scan intervals (minimum 60 seconds)
+   - Automatic detection of new comics
+   - Background processing without manual intervention
+
+3. **Job Monitoring**
    - Real-time job status tracking
    - Progress indicators for batch operations
    - Job history with timestamps
+   - Separate tracking for auto-watch jobs
 
-3. **Log Viewer**
+4. **Uncertain Matches (NEW)**
+   - Review comics with low confidence matches
+   - Manual retry or dismissal options
+   - Prevents incorrect metadata application
+   - Dedicated tab for easy access
+
+5. **Log Viewer**
    - Live log streaming
    - Filter by log level (INFO, WARNING, ERROR, DEBUG)
    - Searchable log entries
