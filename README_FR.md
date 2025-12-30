@@ -67,8 +67,33 @@ Inspiré par l'excellent gestionnaire musical [beets](https://github.com/beetbox
 - Python 3.8 ou supérieur
 - pip (gestionnaire de paquets Python)
 - (Optionnel) Conda pour la gestion d'environnement
+- (Optionnel) Docker pour le déploiement conteneurisé
 
-### Option 1 : Utiliser Conda (Recommandé)
+### Option 1 : Utiliser Docker (Le plus simple)
+
+Docker fournit la façon la plus simple d'exécuter BDneX avec l'interface web :
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/lbesnard/bdnex.git
+cd bdnex
+
+# Créer les répertoires de données
+mkdir -p data/comics data/output
+
+# Démarrer avec docker-compose
+docker-compose up -d
+
+# Accéder à l'interface web sur http://localhost:5000
+```
+
+La configuration Docker inclut :
+- Application BDneX avec toutes les dépendances
+- Interface web pour gérer et surveiller les opérations
+- Volumes persistants pour le cache et la configuration
+- Redémarrage automatique en cas d'échec
+
+### Option 2 : Utiliser Conda (Recommandé pour le développement local)
 
 Créer et activer un environnement virtuel :
 
@@ -80,7 +105,7 @@ conda env create --file=environment.yml
 conda activate bdnex
 ```
 
-### Option 2 : Utiliser venv
+### Option 3 : Utiliser venv
 
 ```bash
 # Créer un environnement virtuel
@@ -118,6 +143,24 @@ bdnex --init
 Cela télécharge et met en cache les données de sitemap pour une correspondance plus rapide des BD (peut prendre quelques minutes au premier lancement).
 
 ## Démarrage rapide
+
+### Utiliser l'interface web (Docker)
+
+Si vous exécutez BDneX avec Docker, accédez à l'interface web sur `http://localhost:5000` :
+
+1. **Initialiser les Sitemaps** : Cliquez sur "Download Sitemaps" pour initialiser la base de données
+2. **Traiter un fichier unique** : Entrez le chemin d'un fichier BD (ex: `/data/comics/comic.cbz`)
+3. **Traiter un répertoire** : Entrez un chemin de répertoire pour traiter toutes les BD qu'il contient
+4. **Surveiller les tâches** : Visualisez l'état et la progression des tâches en temps réel
+5. **Voir les logs** : Consultez les logs de l'application avec filtrage par niveau (INFO, WARNING, ERROR, DEBUG)
+
+L'interface web fournit :
+- 📊 Surveillance des tâches et statistiques en temps réel
+- 📜 Diffusion des logs en direct avec filtrage
+- 📂 Traitement facile de fichiers et répertoires
+- 🔄 Initialisation et mises à jour des sitemaps
+
+### Utiliser la ligne de commande
 
 Traiter un seul fichier de BD :
 ```bash
@@ -237,6 +280,91 @@ cover:
 BDneX stocke les données en cache dans `~/.local/share/bdnex/` :
 - `bedetheque/sitemaps/` : Fichiers sitemap en cache
 - `bedetheque/albums_html/` : Pages d'albums téléchargées
+- `bedetheque/albums_json/` : Métadonnées analysées au format JSON
+- `bedetheque/covers/` : Images de couverture téléchargées
+
+## Déploiement Docker
+
+### Construction et exécution
+
+Construire l'image Docker :
+```bash
+docker build -t bdnex:latest .
+```
+
+Exécuter avec docker-compose (recommandé) :
+```bash
+docker-compose up -d
+```
+
+Exécuter manuellement avec Docker :
+```bash
+docker run -d \
+  -p 5000:5000 \
+  -v $(pwd)/data/comics:/data/comics \
+  -v $(pwd)/data/output:/data/output \
+  -v bdnex-cache:/root/.local/share/bdnex \
+  -v bdnex-config:/root/.config/bdnex \
+  --name bdnex \
+  bdnex:latest
+```
+
+### Gestion Docker
+
+**Voir les logs :**
+```bash
+docker-compose logs -f
+```
+
+**Arrêter le conteneur :**
+```bash
+docker-compose down
+```
+
+**Redémarrer le conteneur :**
+```bash
+docker-compose restart
+```
+
+**Accéder au shell du conteneur :**
+```bash
+docker-compose exec bdnex /bin/bash
+```
+
+### Volumes Docker
+
+La configuration Docker utilise les volumes suivants :
+- `./data/comics` : Répertoire d'entrée pour les fichiers BD
+- `./data/output` : Répertoire de sortie pour les fichiers traités
+- `bdnex-cache` : Cache persistant pour les sitemaps et métadonnées téléchargés
+- `bdnex-config` : Fichiers de configuration persistants
+
+### Fonctionnalités de l'interface web
+
+L'interface web (disponible sur `http://localhost:5000`) fournit :
+
+1. **Gestion des processus**
+   - Traiter des fichiers BD individuels
+   - Traiter des répertoires entiers de manière récursive
+   - Initialiser/mettre à jour les sitemaps de bedetheque.com
+
+2. **Surveillance des tâches**
+   - Suivi de l'état des tâches en temps réel
+   - Indicateurs de progression pour les opérations par lots
+   - Historique des tâches avec horodatages
+
+3. **Visionneuse de logs**
+   - Diffusion des logs en direct
+   - Filtrage par niveau de log (INFO, WARNING, ERROR, DEBUG)
+   - Entrées de log recherchables
+   - Niveaux de log codés par couleur
+
+4. **Tableau de bord des statistiques**
+   - Total des tâches traitées
+   - Nombre de tâches actives
+   - Nombre de tâches terminées et échouées
+
+
 - `bedetheque/albums_json/` : Métadonnées analysées au format JSON
 - `bedetheque/covers/` : Images de couverture téléchargées
 
