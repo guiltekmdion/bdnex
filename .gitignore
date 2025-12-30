@@ -134,6 +134,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Test files
+test_web_interface.py
+
 # C extensions
 *.so
 

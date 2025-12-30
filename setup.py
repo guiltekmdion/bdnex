@@ -28,12 +28,15 @@ setup(
         'bdnex',
         'bdnex.conf',
         'bdnex.lib',
-        'bdnex.ui'
+        'bdnex.ui',
+        'bdnex.web'
     ],
     package_data={  # Optional
         "bdnex.conf": ["*.json",
                        "*.ini",
                        "ComicInfo.xsd"],
+        "bdnex.web": ["templates/*.html",
+                      "static/*"],
     },
     entry_points={
         'console_scripts': [

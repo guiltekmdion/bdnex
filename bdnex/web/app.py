@@ -23,14 +23,18 @@ from bdnex.lib.utils import bdnex_config
 app = Flask(__name__)
 CORS(app)
 
-# Configuration
-UPLOAD_FOLDER = '/data/comics'
-OUTPUT_FOLDER = '/data/output'
+# Configuration - use environment variables with fallback to /data
+UPLOAD_FOLDER = os.environ.get('BDNEX_UPLOAD_FOLDER', '/data/comics')
+OUTPUT_FOLDER = os.environ.get('BDNEX_OUTPUT_FOLDER', '/data/output')
 MAX_LOG_LINES = 1000
 
-# Ensure directories exist
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+# Ensure directories exist (only if they can be created)
+try:
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+except (PermissionError, FileNotFoundError):
+    # If we can't create directories (e.g., in testing), that's okay
+    pass
 
 # Global storage for jobs and logs
 jobs = {}
