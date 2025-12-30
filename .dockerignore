@@ -28,9 +28,8 @@ test/
 .git
 .gitignore
 .github
-README.md
-README_FR.md
 ROADMAP.md
 LICENSE
-*.md
 .coveragerc
+data/
+
