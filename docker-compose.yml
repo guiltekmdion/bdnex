@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  bdnex:
+    build: .
+    container_name: bdnex-app
+    ports:
+      # Web interface will be available at http://localhost:5000
+      - "5000:5000"
+    volumes:
+      # Mount local directories for comics and output
+      # Comics to process should be placed in ./data/comics
+      - ./data/comics:/data/comics
+      # Processed comics will be saved to ./data/output
+      - ./data/output:/data/output
+      # Watch folder for automatic processing
+      - ./data/watch:/data/watch
+      # Persistent cache for downloaded sitemaps and metadata
+      - bdnex-cache:/root/.local/share/bdnex
+      # Persistent configuration files
+      - bdnex-config:/root/.config/bdnex
+    environment:
+      - FLASK_ENV=production
+      # Unbuffered Python output for better logging
+      - PYTHONUNBUFFERED=1
+      # Enable automatic folder watching (true/false)
+      - BDNEX_AUTO_WATCH=true
+      # Watcher interval in seconds (minimum 60)
+      - BDNEX_WATCH_INTERVAL=300
+    restart: unless-stopped
+
+volumes:
+  # Named volumes for persistent data
+  bdnex-cache:
+  bdnex-config:

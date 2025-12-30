@@ -28,12 +28,15 @@ setup(
         'bdnex',
         'bdnex.conf',
         'bdnex.lib',
-        'bdnex.ui'
+        'bdnex.ui',
+        'bdnex.web'
     ],
     package_data={  # Optional
         "bdnex.conf": ["*.json",
                        "*.ini",
                        "ComicInfo.xsd"],
+        "bdnex.web": ["templates/*.html",
+                      "static/*"],
     },
     entry_points={
         'console_scripts': [
@@ -46,6 +49,8 @@ setup(
         'argparse',
         'beautifulsoup4',
         'duckduckgo-search',
+        'flask',
+        'flask-cors',
         'html5lib',  # bs4 dependency
         'imutils',
         'lxml',  # bs4 dependency

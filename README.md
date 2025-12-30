@@ -70,8 +70,33 @@ Inspired by the excellent [beets](https://github.com/beetbox/beets) music manage
 - Python 3.8 or higher
 - pip (Python package manager)
 - (Optional) Conda for environment management
+- (Optional) Docker for containerized deployment
 
-### Option 1: Using Conda (Recommended)
+### Option 1: Using Docker (Easiest)
+
+Docker provides the simplest way to run BDneX with the web interface:
+
+```bash
+# Clone the repository
+git clone https://github.com/lbesnard/bdnex.git
+cd bdnex
+
+# Create data directories
+mkdir -p data/comics data/output
+
+# Start with docker-compose
+docker-compose up -d
+
+# Access the web interface at http://localhost:5000
+```
+
+The Docker setup includes:
+- BDneX application with all dependencies
+- Web interface for managing and monitoring operations
+- Persistent volumes for cache and configuration
+- Automatic restart on failure
+
+### Option 2: Using Conda (Recommended for local development)
 
 Create and activate a virtual environment:
 
@@ -83,7 +108,7 @@ conda env create --file=environment.yml
 conda activate bdnex
 ```
 
-### Option 2: Using venv
+### Option 3: Using venv
 
 ```bash
 # Create a virtual environment
@@ -121,6 +146,44 @@ bdnex --init
 This downloads and caches sitemap data for faster comic matching (may take a few minutes on first run).
 
 ## Quick Start
+
+### Using the Web Interface (Docker)
+
+If you're running BDneX with Docker, access the web interface at `http://localhost:5000`:
+
+1. **Initialize Sitemaps**: Click "Download Sitemaps" to initialize the database
+2. **Process Single File**: Enter the path to a comic file (e.g., `/data/comics/comic.cbz`)
+3. **Process Directory**: Enter a directory path to process all comics in it
+4. **Enable Folder Watcher**: Automatically process new comics in the watch folder
+5. **Monitor Jobs**: View job status and progress in real-time
+6. **Review Uncertain Matches**: Check comics that need manual verification
+7. **View Logs**: Check application logs with filtering by level (INFO, WARNING, ERROR, DEBUG)
+
+The web interface provides:
+- 📊 Real-time job monitoring and statistics
+- 📜 Live log streaming with filtering
+- 📂 Easy file and directory processing
+- 🔄 Sitemap initialization and updates
+- 🔍 **Automatic folder watching with scheduled processing**
+- ⚠️ **Uncertain matches tracking for manual review**
+
+### Automatic Processing (Folder Watcher)
+
+BDneX can automatically monitor a folder and process new comics:
+
+1. Place comics in the watch folder: `./data/watch`
+2. Enable the watcher in the web interface or via environment variable:
+   - Set `BDNEX_AUTO_WATCH=true` in `.env` or `docker-compose.yml`
+   - Configure scan interval (default: 300 seconds)
+3. BDneX will automatically detect and process new files
+
+The watcher:
+- Runs continuously in the background
+- Respects concurrent job limits
+- Tracks processed files to avoid reprocessing
+- Can be enabled/disabled dynamically
+
+### Using the Command Line
 
 Process a single comic file:
 ```bash
@@ -240,6 +303,105 @@ cover:
 BDneX stores cached data in `~/.local/share/bdnex/`:
 - `bedetheque/sitemaps/`: Cached sitemap files
 - `bedetheque/albums_html/`: Downloaded album pages
+- `bedetheque/albums_json/`: Parsed metadata in JSON format
+- `bedetheque/covers/`: Downloaded cover images
+
+## Docker Deployment
+
+### Building and Running
+
+Build the Docker image:
+```bash
+docker build -t bdnex:latest .
+```
+
+Run with docker-compose (recommended):
+```bash
+docker-compose up -d
+```
+
+Run manually with Docker:
+```bash
+docker run -d \
+  -p 5000:5000 \
+  -v $(pwd)/data/comics:/data/comics \
+  -v $(pwd)/data/output:/data/output \
+  -v bdnex-cache:/root/.local/share/bdnex \
+  -v bdnex-config:/root/.config/bdnex \
+  --name bdnex \
+  bdnex:latest
+```
+
+### Docker Management
+
+**View logs:**
+```bash
+docker-compose logs -f
+```
+
+**Stop the container:**
+```bash
+docker-compose down
+```
+
+**Restart the container:**
+```bash
+docker-compose restart
+```
+
+**Access container shell:**
+```bash
+docker-compose exec bdnex /bin/bash
+```
+
+### Docker Volumes
+
+The Docker setup uses the following volumes:
+- `./data/comics`: Input directory for comic files
+- `./data/output`: Output directory for processed files
+- `./data/watch`: **Watch directory for automatic processing**
+- `bdnex-cache`: Persistent cache for downloaded sitemaps and metadata
+- `bdnex-config`: Persistent configuration files
+
+### Web Interface Features
+
+The web interface (available at `http://localhost:5000`) provides:
+
+1. **Process Management**
+   - Process single comic files
+   - Process entire directories recursively
+   - Initialize/update bedetheque.com sitemaps
+
+2. **Automatic Processing (NEW)**
+   - Folder watcher for continuous monitoring
+   - Configurable scan intervals (minimum 60 seconds)
+   - Automatic detection of new comics
+   - Background processing without manual intervention
+
+3. **Job Monitoring**
+   - Real-time job status tracking
+   - Progress indicators for batch operations
+   - Job history with timestamps
+   - Separate tracking for auto-watch jobs
+
+4. **Uncertain Matches (NEW)**
+   - Review comics with low confidence matches
+   - Manual retry or dismissal options
+   - Prevents incorrect metadata application
+   - Dedicated tab for easy access
+
+5. **Log Viewer**
+   - Live log streaming
+   - Filter by log level (INFO, WARNING, ERROR, DEBUG)
+   - Searchable log entries
+   - Color-coded log levels
+
+4. **Statistics Dashboard**
+   - Total jobs processed
+   - Active jobs count
+   - Completed and failed job counts
+
+
 - `bedetheque/albums_json/`: Parsed metadata in JSON format
 - `bedetheque/covers/`: Downloaded cover images
 
